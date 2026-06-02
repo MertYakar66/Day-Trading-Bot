@@ -19,15 +19,18 @@ Public surface:
 
 from __future__ import annotations
 
+from ._remap import GridCoverage
 from .fused import FusedDataProvider
 from .ibkr import (
     IBKR_CONTRACTS,
     IBKRClient,
     IBKRContract,
     IBKRDataProvider,
-    bars_by_day,
-    ingest_payload,
-    payload_to_frame,
+)
+from .yahoo import (
+    UrllibYahooClient,
+    YahooClient,
+    YahooDataProvider,
 )
 from .parity import (
     ParityUnderlyingProvider,
@@ -67,9 +70,10 @@ __all__ = [
     "IBKRClient",
     "IBKRContract",
     "IBKR_CONTRACTS",
-    "payload_to_frame",
-    "bars_by_day",
-    "ingest_payload",
+    "YahooDataProvider",
+    "YahooClient",
+    "UrllibYahooClient",
+    "GridCoverage",
     "ParityUnderlyingProvider",
     "forward_from_parity",
     "spot_from_forward",

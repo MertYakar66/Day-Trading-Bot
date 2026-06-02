@@ -30,6 +30,7 @@ So the underlying is sourced from IBKR/parity and **options from Theta**. The
 | Provider | Source | Role |
 |---|---|---|
 | `IBKRDataProvider` | `IBKR` | underlying intraday bars via a read-only `IBKRClient` (operator: `ib_insync`; dev: IBKR MCP). Underlying only — option methods raise. |
+| `YahooDataProvider` | `YAHOO` | **free** underlying intraday bars (~60 sessions of 5-min, reads only) via a read-only `YahooClient`. The deepest no-Theta source; powers the cross-sectional evaluation. Underlying only. |
 | `ParityUnderlyingProvider` | `PARITY` | underlying reconstructed from ATM call/put quotes (deep history). Proven by tests; consumes Theta option quotes when available. |
 | `StoreBackedProvider` | (declared) | replays previously-ingested data from the parquet store — **network-free, deterministic, CI-safe**. This is what real backtests run on. Enforces provenance (never relabels). |
 | `FusedDataProvider` | `FUSED` | composite: underlying across `[IBKR → parity → free-daily]`, options from Theta. Each frame keeps its own source. |
@@ -71,6 +72,29 @@ intraday bars are forward-filled and **counted**; sessions below `--min-coverage
 
 **Why only SPY/QQQ for S3:** S3 is VWAP/ORB and needs volume. SPX/VIX are indices
 (no volume) — useful as context and for parity, not for the VWAP control.
+
+## 3b. Free Yahoo universe + powered evaluation (no Theta)
+
+Yahoo's chart API serves ~60 sessions of 5-min bars free (browser UA), across a
+wide universe — deeper than IBKR's ~1000-bar cap, so a **statistically powered,
+cross-sectional** real-data test is feasible without Theta:
+
+```bash
+python -m scripts.fetch_yahoo_universe                                    # 24 symbols, 60d/5m → data_raw/yahoo
+python -m scripts.ingest_yahoo_universe --store-root data_raw/store_yahoo # → parquet (DataSource.YAHOO)
+python -m scripts.eval_real_universe --store-root data_raw/store_yahoo    # honest, multiple-testing-aware verdict
+```
+
+The evaluator runs each strategy standalone per symbol (no concurrency-cap
+distortion), aggregates to an equal-weight portfolio, and scores it with
+`intraday.eval`: a **clustered t-stat** (one observation per trading day — correlated
+intraday trades are not double-counted), a **stationary-bootstrap Sharpe CI**, and
+the **Deflated Sharpe Ratio** (Bailey & López de Prado) that discounts the best of
+all strategy×symbol trials, plus a chronological **out-of-sample** split. The
+standard `python -m intraday backtest` also prints a per-run honesty scorecard.
+
+Cross-vendor integrity: ingest the IBKR slice too and compare — Yahoo (consolidated)
+vs IBKR (ARCA) 5-min closes agree to < 2 bps, corroborating the data.
 
 ## 4. Deep history (2022→today) & options: the Theta backfill
 

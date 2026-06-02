@@ -6,6 +6,81 @@
 
 ---
 
+## Session 2026-06-02 — Powered real-data evaluation (feat/real-data-eval)
+
+Autonomous session. Goal: get real data deep enough for a **statistically powered,
+multiple-testing-honest** verdict (the prior blocker was IBKR's ~1000-bar cap),
+build the evaluation rigor to support it, and answer "does any strategy have an
+edge, net of costs, out-of-sample?" honestly. Paper-only; IBKR read-only; Theta
+untouched; data pulled from anywhere except Theta.
+
+### Data unlock — free Yahoo intraday (no Theta, no cost)
+
+Yahoo's chart API (with a browser UA) serves ~**60 sessions of 5-min** bars free,
+across a wide universe. Fetched + ingested a **24-symbol** cross-section (broad/
+sector ETFs + large-caps) → **1,416 session-partitions** (2026-03-09..06-01),
+`DataSource.YAHOO`. Two independent vendors now corroborate: IBKR (ARCA) vs Yahoo
+(consolidated) 5-min closes agreed to **mean 0.12/0.20 bps, max 1.3/2.0 bps** over
+936 SPY/QQQ bars each — strong data integrity.
+
+### What shipped
+
+- `intraday/data/yahoo.py` — `YahooDataProvider` (read-only `YahooClient` +
+  default urllib client) + pure mapper + `ingest_payload`. `DataSource.YAHOO`.
+- `intraday/data/_remap.py` — extracted the START→CLOSE canonical-grid remap
+  (ffill-only, leading-gap skip) into ONE shared module used by IBKR and Yahoo, so
+  the no-look-ahead discipline lives in a single place.
+- `intraday/eval/` — the honesty harness: `clustered_t_stat` (one obs per trading
+  day), `annualized_sharpe`, `stationary_bootstrap_ci`, `probabilistic_sharpe_ratio`
+  + `deflated_sharpe_ratio` (Bailey & López de Prado — multiple-testing penalty),
+  and chronological / walk-forward splits.
+- `intraday/signals/s4_orb_breakout.py` (S4, momentum) and
+  `s5_vwap_momentum.py` (S5, the mirror of S3 reversion) — underlying-only,
+  testable on real data, each with an explicit falsifiable edge.
+- `intraday/live/poller.py` — read-only single-shot `LivePoller` (snapshot →
+  PIT features → gate → reviewers → paper decision; **no orders**).
+- CLI: `--provider yahoo-store`, `--strategy s4/s5`, and a default **honesty
+  scorecard** (clustered-t, bootstrap-CI Sharpe, deflated Sharpe) on every report.
+- Scripts: `fetch_yahoo_universe`, `ingest_yahoo_universe`, `eval_real_universe`
+  (powered cross-sectional eval), `live_paper_poll`.
+- Tests: +`test_data_yahoo`, `test_eval`, `test_s4_s5`, `test_live_poller`,
+  `test_data_quality_xvendor`. Full suite **356 passed**.
+
+### Headline result — NO EDGE (real data, net of costs, multiple-testing-honest)
+
+24 symbols × 59 real 5-min sessions, each strategy run standalone per symbol then
+aggregated to an equal-weight portfolio:
+
+| strat | portfolio Sharpe (ann) | 95% CI | day t | DSR over 72 trials |
+|---|---|---|---|---|
+| S3 reversion | −2.83 | [−5.39, 0.14] | −1.37 | **0.000** |
+| S4 ORB breakout | −2.65 | [−6.75, 0.89] | −1.28 | **0.000** |
+| S5 VWAP momentum | −4.86 | [−9.73, −1.09] | −2.35 | **0.000** |
+
+- **Deflated Sharpe ≈ 0 for all** — after discounting 72 strategy×symbol trials,
+  none has any probability of a true positive Sharpe.
+- **OOS:** best-on-train (S4) did *worse* on the held-out half (test Sharpe −7.07).
+- **Cost attribution (whole 24-symbol book):** S3 gross ≈ **−$348 (flat — no
+  predictive edge)**, bled by **$12.4k** costs; S4/S5 are gross-*negative* too
+  (breakouts fade, 5-min momentum reverts) plus costs. ~3.3k–3.9k trades each.
+- **Verdict: no demonstrated edge.** This is the trustworthy outcome — the engine
+  reports the truth (no edge) rather than a fabricated one. Earlier the 12-session
+  IBKR S3 +$306 looked positive; the deeper 59-session test shows it was noise.
+
+### Decisions + rationale
+
+- **Cross-section over depth:** IBKR caps intraday history at ~13 sessions, so the
+  statistical power comes from breadth (24 symbols × 59 Yahoo sessions), with a
+  per-day clustered t and a portfolio series that respects same-day correlation.
+- **Deflated Sharpe is mandatory:** testing reversion AND its mirror (momentum) on
+  the same data is multiple testing; the DSR + OOS split keep it honest.
+- **Per-symbol standalone runs** (then aggregate) avoid the 3-position concurrency
+  cap distorting a cross-sectional test.
+- **Read-only everywhere:** Yahoo/IBKR are data reads only; the LivePoller and all
+  scripts place no orders; Theta never touched.
+
+---
+
 ## Session 2026-06-02 — Real-data integration (feat/real-data-path)
 
 First honest backtest on REAL intraday data, and the corrected real-data wiring.

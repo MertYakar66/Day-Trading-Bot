@@ -91,3 +91,65 @@ def make_ibkr_payload():
         return payload
 
     return _make
+
+
+@pytest.fixture
+def make_yahoo_payload():
+    """Factory building a deterministic Yahoo chart-API-shaped payload.
+
+    Bars are **start-labelled** epoch-second timestamps (as Yahoo returns) across one
+    RTH session, nested under ``chart.result[0]`` with ``indicators.quote[0]``. Same
+    ``n_bars``/``drop`` options as the IBKR factory.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from intraday.timeutils import parse_interval, session_bounds_utc
+
+    def _make(
+        day: date,
+        interval: str = "5m",
+        *,
+        symbol: str = "SPY",
+        base: float = 500.0,
+        n_bars: int | None = None,
+        drop: tuple[int, ...] = (),
+        amp: float = 1.0,
+        wiggle: float = 0.05,
+    ) -> dict:
+        open_utc, close_utc = session_bounds_utc(day)
+        step = parse_interval(interval)
+        starts = pd.date_range(start=open_utc, end=close_utc - step, freq=step)
+        if n_bars is not None:
+            starts = starts[:n_bars]
+        n = len(starts)
+        t = np.arange(n)
+        mid = base + amp * np.sin(2.0 * np.pi * t / max(n, 1) * 3.0) + wiggle * ((t % 7) - 3.0)
+        op = mid.copy()
+        cl = np.roll(mid, -1)
+        cl[-1] = mid[-1]
+        hi = np.maximum(op, cl) + 0.10
+        lo = np.minimum(op, cl) - 0.10
+        vol = 1000.0 + (t % 11) * 137.0
+        keep = [i for i in range(n) if i not in set(drop)]
+        ts = [int(pd.Timestamp(starts[i]).timestamp()) for i in keep]
+        quote = {
+            "open": [round(float(op[i]), 2) for i in keep],
+            "high": [round(float(hi[i]), 2) for i in keep],
+            "low": [round(float(lo[i]), 2) for i in keep],
+            "close": [round(float(cl[i]), 2) for i in keep],
+            "volume": [float(vol[i]) for i in keep],
+        }
+        return {
+            "chart": {
+                "result": [{
+                    "meta": {"symbol": symbol, "exchangeTimezoneName": "America/New_York",
+                             "gmtoffset": -14400},
+                    "timestamp": ts,
+                    "indicators": {"quote": [quote]},
+                }],
+                "error": None,
+            }
+        }
+
+    return _make

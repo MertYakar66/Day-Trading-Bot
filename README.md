@@ -29,21 +29,30 @@ python -m intraday backtest --start 2026-05-01 --end 2026-05-29              # S
 python -m intraday backtest --symbols SPY --strategy s1 --start 2026-05-04 --end 2026-05-08  # S1 (synthetic)
 python -m intraday backtest --symbols SPY --strategy s2 --start 2026-05-04 --end 2026-05-08  # S2 (synthetic)
 
-# Real data (after ingesting IBKR underlying — see docs/REAL_DATA.md):
-python -m scripts.ingest_ibkr_underlying --raw-dir data_raw/ibkr --store-root data_store
-python -m intraday backtest --provider ibkr-store --symbols SPY QQQ --interval 5m \
-    --strategy s3 --start <first-session> --end <last-session>               # S3 on REAL IBKR data
+# Real data — free Yahoo intraday universe (no Theta; see docs/REAL_DATA.md):
+python -m scripts.fetch_yahoo_universe                                        # 24 symbols, 60d/5m → data_raw/yahoo
+python -m scripts.ingest_yahoo_universe --store-root data_raw/store_yahoo     # → parquet (DataSource.YAHOO)
+python -m intraday backtest --provider yahoo-store --store-root data_raw/store_yahoo \
+    --symbols SPY QQQ --interval 5m --strategy s3 s4 s5 --start 2026-03-09 --end 2026-06-01
+
+# Powered, multiple-testing-honest evaluation across the universe:
+python -m scripts.eval_real_universe --store-root data_raw/store_yahoo        # clustered-t, bootstrap CI, deflated Sharpe
+
+# Read-only paper poll (NO orders) at the latest stored session:
+python -m scripts.live_paper_poll --provider yahoo-store --store-root data_raw/store_yahoo --symbols SPY QQQ
 ```
 
-> **Status:** Phase 0 + Phase 1 complete and green (**312 tests**), plus a wired
-> **real-data path**. The gamma spine — S1 (gamma-regime), S2 (0DTE VRP,
-> **defined-risk only**), S3 (VWAP control) — runs behind the one net-of-cost
-> expectancy gate, plus a paper ledger. **Corrected data tiers:** options come from
-> **Theta STANDARD**; the **underlying** comes from **IBKR** (intraday, reads only)
-> or **put-call parity** (deep history) — never Theta. A first REAL-data S3 run on
-> ~13 IBKR sessions was net-positive after costs but **statistically insignificant
-> (not an edge)**. Theta is not touched in build sessions. See
-> [`docs/REAL_DATA.md`](docs/REAL_DATA.md), [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) §0.
+> **Status:** Phase 0 + Phase 1 complete and green (**356 tests**), plus a wired
+> **real-data path** and a **powered, multiple-testing-honest evaluation**.
+> Strategies behind the one net-of-cost gate: S1 (gamma-regime), S2 (0DTE VRP,
+> **defined-risk only**), S3 (VWAP reversion), **S4 (ORB breakout)**, **S5 (VWAP
+> momentum)**, plus a paper ledger and a read-only live poller. **Data tiers:**
+> options from **Theta STANDARD**; **underlying** from **IBKR** or **Yahoo** (free,
+> reads only) or **put-call parity** — never Theta. **Headline result:** on 24
+> symbols × 59 real 5-min sessions, net of costs, **no underlying-only strategy
+> shows an edge** (all deflated-Sharpe ≈ 0; OOS fails) — the engine reports the
+> truth, not a fabricated edge. See [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) §0
+> and [`docs/REAL_DATA.md`](docs/REAL_DATA.md).
 
 ## Dependencies
 

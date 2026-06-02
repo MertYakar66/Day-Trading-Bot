@@ -1,47 +1,56 @@
-# Final Report — Intraday Engine (Phase 0 + Phase 1 + Real-Data Path)
+# Final Report — Intraday Engine (Phase 0 + Phase 1 + Real-Data Path + Powered Eval)
 
-**Date:** 2026-06-02 · **Status:** Phase 0 + Phase 1 complete; the real-data path is
-now wired and run on a first REAL sample. 312 tests passing. · **Data: SYNTHETIC
-validates the harness; a first REAL-data S3 backtest (IBKR underlying) was net-
-positive on a tiny window but is STATISTICALLY INSIGNIFICANT — NOT a demonstrated
+**Date:** 2026-06-02 · **Status:** Phase 0 + Phase 1 complete; real-data path wired
+(IBKR + Yahoo underlying); powered, multiple-testing-honest real-data evaluation
+run. 356 tests passing. · **Verdict: on 24 symbols × 59 real 5-min sessions, net of
+costs, NO underlying-only strategy (reversion/breakout/momentum) shows an edge —
+all deflated-Sharpe ≈ 0, OOS fails. The engine reports the truth, not a fabricated
 edge.** See §0.
 
-## 0. Real-data validation (2026-06-02) — the first honest real-data run
+## 0. Powered real-data evaluation (2026-06-02) — the honest verdict
 
-The corrected data-tier reality was wired (options=Theta STANDARD;
-underlying=IBKR/parity — Theta never serves the underlying; see
-[`REAL_DATA.md`](REAL_DATA.md)) and the **first backtest on REAL intraday data** was
-run. Theta was **not touched** (operator uses it concurrently); the underlying came
-from **IBKR** (reads only).
+Data sourced from **anywhere except Theta** (Theta actively in use). The unlock:
+free **Yahoo** intraday (≈60 sessions of 5-min, with a browser UA) across a wide
+universe — far deeper than IBKR's ~1000-bar (~13-session) cap. Ingested a
+**24-symbol cross-section** (broad/sector ETFs + large-caps), **1,416 sessions**
+(2026-03-09..06-01). **Data integrity:** IBKR (ARCA) vs Yahoo (consolidated) 5-min
+closes agreed to **< 2 bps** (mean 0.12–0.20 bps) over 936 SPY/QQQ bars each.
 
-**Data reality:** IBKR's data endpoint caps at **1000 bars/request, back-from-now**.
-The practical maximum real 5-min history is ~**13 recent sessions** — deep
-2022→today intraday genuinely needs the Theta options pull + put-call parity
-(operator backfill, [`OPERATOR_RUNBOOK.md`](OPERATOR_RUNBOOK.md)). So this run is a
-**small-sample plumbing validation**, by necessity.
+Each strategy was run standalone per symbol (no concurrency-cap distortion), then
+aggregated to an equal-weight portfolio and scored with the honesty harness
+(`intraday.eval`): clustered t-stat (one obs per trading day), bootstrap-CI Sharpe,
+and the **Deflated Sharpe Ratio** discounting all 72 strategy×symbol trials.
 
-**S3 (VWAP-reversion control) on 12 real SPY+QQQ 5-min sessions (2026-05-14..06-01),
-net of costs:**
+| strategy | portfolio Sharpe (ann) | 95% CI | day t (p) | **DSR / 72 trials** |
+|---|---|---|---|---|
+| S3 VWAP reversion | −2.83 | [−5.39, 0.14] | −1.37 (0.18) | **0.000** |
+| S4 ORB breakout | −2.76 | [−6.85, 0.77] | −1.34 (0.19) | **0.000** |
+| S5 VWAP momentum | −4.89 | [−9.94, −1.07] | −2.37 (0.02) | **0.000** |
 
-| metric | value |
-|---|---|
-| trades | 65 |
-| NET PnL | **+$306.88 (+0.31% of $100k)** |
-| net Sharpe / Sortino | 2.84 / 7.66 |
-| win rate / payoff | 46.2% / 1.48 |
-| cost | $376.88 (2.95 bps of notional — same model as synthetic) |
-| **daily-PnL t-stat (n=12)** | **0.80 — NOT significant** |
+**The best single trial of 72** (S3 on SMH) had an annualized Sharpe of **2.42** —
+but t = 1.17 (insignificant) and, deflated for the 72-trial search, **DSR = 0.13**:
+exactly the "winner" a search over 72 zero-edge strategies throws up by luck. This
+is the harness earning its keep — it refuses to certify the best-looking fluke.
 
-**Verdict (honest): no edge is claimed.** The result is net-positive after costs and
-internally consistent (balanced across SPY/QQQ and across both halves; the no-edge
-control `edge=0.0` correctly produces **0 trades** — the gate refuses everything
-absent an edge assumption). But **t = 0.80 over 12 sessions cannot reject "no
-edge"** — it is equally consistent with a genuine short-horizon mean-reversion
-tendency and with noise, and the best single day is ~60% of the total. A credible
-go/no-go requires a powered, out-of-sample test on the deep-history backfill.
+**Cost attribution (whole 24-symbol, $2.4M book):** S3 gross ≈ **−$348 (flat — no
+predictive edge)** bled by **$12.4k** costs → net −$12.7k; S4/S5 are gross-*negative*
+(−$5.7k/−$3.8k: breakouts fade, 5-min momentum reverts) plus costs. ~3.2k–3.9k
+trades each.
 
-**S1 / S2:** require real **option** data → blocked on the operator's scoped Theta
-pull. The path is built and proven by tests; not run this session.
+**Out-of-sample:** picking the best strategy on the train half (S4, train Sharpe
+−0.91) and testing on the held-out half gave Sharpe **−7.12** — the in-sample
+"winner" fails OOS.
+
+**Verdict: no demonstrated edge.** After multiple-testing deflation and OOS, none of
+these simple underlying-only intraday strategies beats costs on real data — exactly
+what efficient prices + transaction costs predict. A naive read would have noted
+that an earlier **12-session** IBKR S3 run was net **+$306.88** (Sharpe 2.84); the
+deeper 59-session test (t and DSR above) shows that was **noise**. This is the value
+of the harness: it refuses to let a small-sample fluke masquerade as alpha.
+
+**S1 / S2** (gamma-regime, 0DTE VRP) need real **option** data → still blocked on the
+operator's scoped Theta pull ([`OPERATOR_RUNBOOK.md`](OPERATOR_RUNBOOK.md)); built and
+proven by tests, not run.
 
 **What this validates (proven):** the real-data plumbing end-to-end — IBKR
 start→close grid remap (feed-gap-clean, coverage-honest), provenance enforcement

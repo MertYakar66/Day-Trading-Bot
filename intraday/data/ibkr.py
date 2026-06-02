@@ -48,11 +48,12 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import pandas as pd
 
-from ..config import DataConfig, EngineConfig, SessionConfig
-from ..contracts import BAR_COLUMNS, AssetKind, BarSeries, DataSource
+from ..config import EngineConfig, SessionConfig
+from ..contracts import AssetKind, BarSeries, DataSource
 from ..logging_config import get_logger
-from ..timeutils import ET, bar_close_index, parse_interval, trading_days as _trading_days
-from .provider import DataProvider, DataUnavailable, asset_kind_for
+from ..timeutils import trading_days as _trading_days
+from ._remap import split_start_labelled_to_sessions
+from .provider import DataProvider, DataUnavailable
 
 logger = get_logger(__name__)
 
@@ -122,24 +123,8 @@ class IBKRClient(Protocol):
 
 
 # --------------------------------------------------------------------------- #
-# Pure payload → frame / per-day BarSeries
+# Pure payload → frame (the canonical-grid remap is shared via data._remap)
 # --------------------------------------------------------------------------- #
-@dataclass(frozen=True)
-class GridCoverage:
-    """How well a session's real bars covered the canonical grid (honesty metric)."""
-
-    symbol: str
-    day: date
-    expected: int          # canonical grid slots for the session
-    present: int           # slots backed by a real IBKR bar
-    filled: int            # interior/trailing slots forward-filled from a PAST bar
-    leading_missing: int   # leading slots with NO prior bar (would need a FUTURE value)
-
-    @property
-    def coverage(self) -> float:
-        return (self.present / self.expected) if self.expected else 0.0
-
-
 def payload_to_frame(payload: Mapping) -> pd.DataFrame:
     """Raw IBKR history payload → DataFrame indexed by bar-**START** ts (UTC).
 
@@ -179,40 +164,6 @@ def payload_to_frame(payload: Mapping) -> pd.DataFrame:
     return frame
 
 
-def _align_day_to_grid(
-    day_close_frame: pd.DataFrame,
-    symbol: str,
-    day: date,
-    interval: str,
-    *,
-    session: SessionConfig,
-    is_index: bool,
-) -> tuple[pd.DataFrame, GridCoverage]:
-    """Reindex one session's CLOSE-labelled frame onto the canonical grid.
-
-    Interior/trailing missing OHLC slots are **forward-filled only** (carry the
-    last KNOWN price forward — PIT-correct, uses only the past). We deliberately do
-    NOT back-fill: a *leading* missing slot (before the first real bar) would
-    otherwise pull a FUTURE bar's value backward, a look-ahead. Leading gaps are
-    counted in :class:`GridCoverage.leading_missing` and the caller skips such
-    sessions (no observed open ⇒ don't trade it). Missing volume slots are 0 (no
-    trade); index instruments carry zero volume by construction.
-    """
-    target = bar_close_index(day, interval, session)
-    aligned = day_close_frame.reindex(target)
-    present_mask = aligned["close"].notna()
-    present = int(present_mask.sum())
-    leading_missing = int(present_mask.to_numpy().argmax()) if present else len(target)
-    volume = aligned["volume"].fillna(0.0)
-    ohlc = aligned[["open", "high", "low", "close"]].ffill()  # forward (past) only
-    out = ohlc.copy()
-    out["volume"] = 0.0 if is_index else volume
-    out = out[list(BAR_COLUMNS)]
-    out.index.name = "ts"
-    filled = int(len(target) - present - leading_missing)
-    return out, GridCoverage(symbol.upper(), day, len(target), present, filled, leading_missing)
-
-
 def bars_by_day(
     symbol: str,
     payload: Mapping,
@@ -224,55 +175,14 @@ def bars_by_day(
     min_coverage: float = 0.8,
     max_leading_missing: int = 0,
 ) -> dict[date, BarSeries]:
-    """Split a (multi-day) IBKR payload into per-session canonical-grid BarSeries.
-
-    Sessions are skipped and logged (never padded with fabricated data) when:
-    - coverage is below ``min_coverage`` of the canonical grid (half-days /
-      holidays / sparse names), or
-    - the leading gap exceeds ``max_leading_missing`` (default 0): no observed open
-      ⇒ forward-fill cannot define the early bars without a future value, so we do
-      not trade that session.
-    """
-    session = session or SessionConfig()
-    latency = latency if latency is not None else pd.Timedelta(milliseconds=DataConfig().bar_latency_ms)
-    kind = asset_kind or asset_kind_for(symbol)
-    is_index = kind is AssetKind.INDEX
-
-    frame = payload_to_frame(payload)
-    if frame.empty:
-        return {}
-    # START label → CLOSE label (engine indexes by close).
-    frame = frame.copy()
-    frame.index = frame.index + parse_interval(interval)
-    # Session date = ET calendar date of the close timestamp (RTH closes are mid-day).
-    et_dates = pd.DatetimeIndex(frame.index).tz_convert(ET).date
-
-    out: dict[date, BarSeries] = {}
-    for day in sorted(set(et_dates)):
-        day_frame = frame.loc[et_dates == day]
-        aligned, cov = _align_day_to_grid(
-            day_frame, symbol, day, interval, session=session, is_index=is_index
-        )
-        if cov.present == 0 or cov.coverage < min_coverage:
-            logger.warning(
-                "IBKR %s %s: coverage %.0f%% (%d/%d) below %.0f%% — skipping session",
-                symbol, day, cov.coverage * 100, cov.present, cov.expected, min_coverage * 100,
-            )
-            continue
-        if cov.leading_missing > max_leading_missing:
-            logger.warning(
-                "IBKR %s %s: leading gap of %d bars (no observed open; would need a "
-                "future value) — skipping session to avoid look-ahead",
-                symbol, day, cov.leading_missing,
-            )
-            continue
-        if cov.filled:
-            logger.info(
-                "IBKR %s %s: forward-filled %d/%d missing %s bars (coverage %.1f%%)",
-                symbol, day, cov.filled, cov.expected, interval, cov.coverage * 100,
-            )
-        out[day] = BarSeries(symbol.upper(), interval, aligned, DataSource.IBKR, latency)
-    return out
+    """Split a (multi-day) IBKR payload into per-session canonical-grid BarSeries
+    (tagged ``DataSource.IBKR``). The PIT remap + coverage/leading-gap skip live in
+    :func:`intraday.data._remap.split_start_labelled_to_sessions`."""
+    return split_start_labelled_to_sessions(
+        symbol, payload_to_frame(payload), interval, DataSource.IBKR,
+        session=session, latency=latency, asset_kind=asset_kind,
+        min_coverage=min_coverage, max_leading_missing=max_leading_missing,
+    )
 
 
 # --------------------------------------------------------------------------- #
