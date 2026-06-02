@@ -29,6 +29,15 @@ def _trade_type(instrument: AssetKind) -> str:
     return "option" if instrument is AssetKind.OPTION else "stock"
 
 
+def commission(instrument: AssetKind, size: int, cfg: CostConfig) -> float:
+    """One-leg commission in dollars, from CostConfig (the config is the source of
+    truth — we do NOT use SWE's hard-coded globals, which also mis-scale stock
+    commission as 100-share lots). Options: per contract; stock: per share."""
+    if instrument is AssetKind.OPTION:
+        return cfg.option_commission_per_contract * size
+    return cfg.stock_commission_per_share * size
+
+
 def round_trip_cost(
     *,
     side: Side,
@@ -84,13 +93,13 @@ def round_trip_cost(
         (entry_full - entry_spread_only) + (exit_full - exit_spread_only)
     ) * units
 
-    commission = tc.calculate_commission(_trade_type(instrument), size) * 2.0  # both legs
+    comm = commission(instrument, size, cfg) * 2.0  # both legs
 
-    total = entry_slip_usd + exit_slip_usd + commission
+    total = entry_slip_usd + exit_slip_usd + comm
     return CostBreakdown(
         entry_slippage=entry_slip_usd,
         exit_slippage=exit_slip_usd,
-        commission=commission,
+        commission=comm,
         impact=impact_usd,
         total=total,
         detail={

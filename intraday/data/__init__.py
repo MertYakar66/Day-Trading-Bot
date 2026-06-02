@@ -17,7 +17,14 @@ from .provider import (
     TierUnavailable,
     asset_kind_for,
 )
-from .quality import LiquidityCheck, assess_liquidity, is_stale, spread_bps
+from .quality import (
+    LiquidityCheck,
+    assert_no_feed_gap,
+    assess_liquidity,
+    detect_feed_gap,
+    is_stale,
+    spread_bps,
+)
 from .store import ParquetStore
 from .synthetic import SyntheticDataProvider
 from .theta_adapter import ThetaDataProvider, ThetaNotConnectedThisSession
@@ -36,4 +43,6 @@ __all__ = [
     "assess_liquidity",
     "is_stale",
     "spread_bps",
+    "detect_feed_gap",
+    "assert_no_feed_gap",
 ]

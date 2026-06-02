@@ -39,6 +39,7 @@ from ..contracts import (
     Verdict,
 )
 from ..data.provider import DataProvider, asset_kind_for
+from ..data.quality import assert_no_feed_gap
 from ..features.base import FeatureRow
 from ..features.pipeline import FeaturePipeline
 from ..logging_config import get_logger
@@ -146,6 +147,8 @@ class IntradayBacktester:
         loaded: dict[str, dict] = {}
         for sym in symbols:
             bars = self.provider.get_bars(sym, day, interval)
+            # DESIGN §2.4 freshness: halt on a gapped feed rather than guess.
+            assert_no_feed_gap(bars.frame.index, interval)
             sf = self.pipeline.precompute(bars, day)
             frame = bars.frame
             or_known_i = self._orb_known_index(frame.index, sf)
@@ -166,6 +169,15 @@ class IntradayBacktester:
         ref = loaded[symbols[0]]
         index = ref["frame"].index
         n = len(index)
+        # All symbols share the same RTH bar grid; guard against a mismatch so an
+        # accidental misalignment surfaces loudly rather than silently using i on
+        # a differently-indexed frame.
+        for sym in symbols:
+            if len(loaded[sym]["frame"].index) != n:
+                raise ValueError(
+                    f"bar index length mismatch for {sym}: "
+                    f"{len(loaded[sym]['frame'].index)} != {n}"
+                )
         bar_latency = loaded[symbols[0]]["bars"].latency
         flatten_at = flatten_time_utc(day, cfg.session)
 
@@ -225,13 +237,19 @@ class IntradayBacktester:
                 if opened:
                     continue
 
-        # Safety: flatten anything still open at the last close (should be none).
+        # Safety: flatten anything still open at the last close (should be none,
+        # since the time-stop fires at flatten_at). Charge the exit cost too.
         for sym in list(positions.keys()):
             pos = positions[sym]
             d = loaded[sym]
             fill_price = float(d["close"][n - 1])
+            _, exit_cost = conservative_fill(
+                side=pos.side, instrument=pos.instrument, next_open=fill_price,
+                spread=cfg.cost.fallback_spread_pct * fill_price, size=pos.size,
+                adv=pos.meta.get("adv"), config=cfg.cost, is_entry=False,
+            )
             gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
-            costs = pos.entry_cost
+            costs = pos.entry_cost + exit_cost
             net = gross - costs
             day_realized += net
             equity += net

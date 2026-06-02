@@ -9,11 +9,18 @@ bands are defined, fade extreme deviations from session VWAP back toward it:
 - price ≥ ``entry_z`` σ ABOVE VWAP → SHORT, target = VWAP, stop = ``stop_k`` σ higher;
 - price ≤ ``entry_z`` σ BELOW VWAP → LONG,  target = VWAP, stop = ``stop_k`` σ lower.
 
-Honesty about the win probability: ``win_prob`` is a deliberately NEUTRAL prior
-(default 0.50) — the control makes no predictive claim. Its expectancy comes from
-the favorable reward/risk geometry of fading a ≥2σ stretch toward VWAP, and the
-gate then decides tradeability NET OF COSTS. ``win_prob`` is the obvious knob to
-calibrate against realized hit-rate once real data exists (DESIGN §11 #4).
+Honesty about the win probability (this is load-bearing — see the adversarial
+review note in PROGRESS.md): a flat ``win_prob=0.5`` is NOT neutral when the
+payoff is asymmetric. The genuinely no-edge baseline for a target/stop bet on a
+driftless price is the **gambler's-ruin probability**
+``p_fair = risk / (reward + risk)``, for which ``E[gross] = p_fair·reward −
+(1−p_fair)·risk ≡ 0`` exactly. S3 therefore sets ``win_prob = p_fair + edge``,
+where ``edge`` (default 0.0) is the strategy's EXPLICIT, falsifiable
+mean-reversion thesis ("a ≥entry_z σ stretch reverts ``edge`` more often than
+chance"). With ``edge=0`` the gate correctly REFUSES every trade (no edge cannot
+beat costs); with ``edge>0`` the gate certifies EV *conditional on that stated
+edge*, to be validated against realized hit-rate (DESIGN §11 #4). This keeps the
+control from rubber-stamping itself through the gate.
 """
 
 from __future__ import annotations
@@ -39,11 +46,15 @@ class S3VwapOrb:
         *,
         entry_z: float = 2.0,
         stop_k: float = 1.0,
-        win_prob: float = 0.50,
+        edge: float = 0.10,
     ) -> None:
         self.entry_z = entry_z
         self.stop_k = stop_k
-        self.win_prob = win_prob
+        # Explicit, falsifiable edge over the gambler's-ruin fair baseline.
+        # 0.0 ⇒ no edge claim ⇒ the gate refuses all S3 trades (E[gross]=0 < costs).
+        # The default 0.10 is the documented mean-reversion thesis (calibrate on
+        # real data). It is added to p_fair, NOT a free-standing win probability.
+        self.edge = edge
 
     def propose(self, fr: FeatureRow, *, config: EngineConfig) -> SignalProposal | None:
         # Require a defined VWAP band, a formed opening range, and a price.
@@ -75,6 +86,13 @@ class S3VwapOrb:
             target = fr.vwap
             stop = ref - self.stop_k * sigma
 
+        # No-edge fair baseline (gambler's ruin) + the explicit edge thesis.
+        reward = abs(target - ref)
+        risk = abs(ref - stop)
+        denom = reward + risk
+        p_fair = (risk / denom) if denom > 0 else 0.5
+        win_prob = min(0.99, max(0.01, p_fair + self.edge))
+
         return SignalProposal(
             strategy_id=self.strategy_id,
             symbol=fr.symbol,
@@ -84,8 +102,9 @@ class S3VwapOrb:
             ref_price=ref,
             target_price=target,
             stop_price=stop,
-            win_prob=self.win_prob,
+            win_prob=win_prob,
             spread=spread,
             adv=_ADV_SHARES.get(fr.symbol),
-            meta={"vwap_dev_sigma": z, "vwap": fr.vwap, "sigma": sigma},
+            meta={"vwap_dev_sigma": z, "vwap": fr.vwap, "sigma": sigma,
+                  "p_fair": p_fair, "edge": self.edge},
         )

@@ -84,14 +84,18 @@ class ParquetStore:
         part.mkdir(parents=True, exist_ok=True)
         path = part / "trades.parquet"
         tape.frame.to_parquet(path, engine="pyarrow", index=False)
+        (part / "trades_meta.json").write_text(
+            json.dumps({"symbol": tape.symbol, "source": tape.source.value})
+        )
         return path
 
     def read_tape(self, symbol: str, day: date) -> OptionTape:
-        path = self._partition("option_tape", symbol, day) / "trades.parquet"
+        part = self._partition("option_tape", symbol, day)
+        path = part / "trades.parquet"
         if not path.exists():
             raise FileNotFoundError(f"no tape at {path}")
         frame = pd.read_parquet(path, engine="pyarrow")
-        return OptionTape(symbol.upper(), frame, DataSource.SYNTHETIC)
+        return OptionTape(symbol.upper(), frame, self._read_source(part / "trades_meta.json"))
 
     # -- option chain --------------------------------------------------- #
     def write_chain(self, chain: OptionChainSeries, day: date) -> Path:
@@ -99,14 +103,31 @@ class ParquetStore:
         part.mkdir(parents=True, exist_ok=True)
         path = part / "chain.parquet"
         chain.frame.to_parquet(path, engine="pyarrow", index=False)
+        (part / "chain_meta.json").write_text(
+            json.dumps({"symbol": chain.symbol, "source": chain.source.value})
+        )
         return path
 
     def read_chain(self, symbol: str, day: date) -> OptionChainSeries:
-        path = self._partition("option_chain", symbol, day) / "chain.parquet"
+        part = self._partition("option_chain", symbol, day)
+        path = part / "chain.parquet"
         if not path.exists():
             raise FileNotFoundError(f"no chain at {path}")
         frame = pd.read_parquet(path, engine="pyarrow")
-        return OptionChainSeries(symbol.upper(), frame, DataSource.SYNTHETIC)
+        return OptionChainSeries(symbol.upper(), frame, self._read_source(part / "chain_meta.json"))
+
+    @staticmethod
+    def _read_source(meta_path: Path) -> DataSource:
+        """Recover persisted provenance; never silently relabel real data.
+
+        If the sidecar is missing we cannot prove provenance, so we refuse to
+        guess (a missing sidecar means the writer predates provenance tracking).
+        """
+        if meta_path.exists():
+            return DataSource(json.loads(meta_path.read_text())["source"])
+        raise FileNotFoundError(
+            f"missing provenance sidecar {meta_path}; refusing to assume a data source"
+        )
 
     # -- features ------------------------------------------------------- #
     def write_features(self, symbol: str, day: date, group: str, df: pd.DataFrame) -> Path:

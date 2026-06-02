@@ -56,18 +56,19 @@ python -m intraday backtest --start 2026-05-01 --end 2026-05-29
 
 ### Headline Phase-0 result (SYNTHETIC — not an edge)
 
-On random-walk-dominant synthetic SPY/QQQ over a synthetic month, S3's **gross
-PnL ≈ $0** (≈+$73 over 301 trades / ~$6M turnover) and the **net result is
-negative entirely due to transaction costs** (≈ −1.8% of NAV; ~3 bps of
-notional/round-trip). This is the honest, expected outcome for a naive control on
-efficient prices and validates the harness three ways:
-1. **No look-ahead** — gross ≈ 0 on a driftless walk (leakage would make it
-   systematically positive); win rate ≈ 1/3 matches gambler's-ruin for fading a
-   2σ stretch with a 1σ stop.
-2. **Costs have real, dominant bite** — the whole loss is frictions.
-3. **No fabricated edge** — an integration test confirms the engine *captures*
-   gross edge when the synthetic world is mean-reverting and *manufactures none*
-   when it is a random walk.
+S3's win probability is the gambler's-ruin **fair baseline** (`risk/(reward+risk)`,
+0 net-EV) plus an explicit, falsifiable `edge` thesis:
+- `--edge 0.0` (no edge claim): the gate **refuses all 244 candidate signals → 0
+  trades, $0 PnL.** The single cleanest validation of the net-of-cost gate.
+- `--edge 0.10` (default thesis): 244 trades, gross ≈ −$475 (≈0 vs ~$5M turnover),
+  net **−$1,926 (−1.9% NAV)** — the thesis is false on a random walk, so the loss is
+  essentially all transaction costs (~3.0 bps notional / ~$6 per round-trip).
+
+This validates the harness four ways: (1) **no look-ahead** — gross ≈ 0 on a
+driftless walk; (2) **the gate works** — a no-edge control is fully blocked;
+(3) **costs dominate** and are correctly subtracted; (4) **no fabricated edge** — an
+integration test confirms the engine captures gross edge only when the synthetic
+world is genuinely mean-reverting.
 
 ### Key decisions + rationale
 
@@ -130,8 +131,22 @@ efficient prices and validates the harness three ways:
    once real-data noise is visible.
 4. **S3 `win_prob`** and entry_z/stop_k — calibrate against realized hit-rate.
 
+### Adversarial review (6-lens) — addressed
+
+Ran a 6-lens adversarial review (look-ahead, costs, gate, accounting, honesty,
+completeness). **No critical issues; guardrails hold.** Fixed: win_prob → fair
+baseline + explicit edge (was a flat 0.5 that rubber-stamped the gate); freshness
+feed-gap HALT wired into the backtest (was stubbed); tape/chain provenance now
+round-trips (can't relabel real data as synthetic); open_interest threaded through
+fills; commission now config-driven (fixed dead config + stock-unit mis-scale);
+eod safety exit-cost; synthetic snapshot spot; defensive bar-index alignment guard.
+Documented (non-blocking): kill-switch is realized-PnL based (open-MTM is Phase 1),
+gate EV is a pre-fill estimate, turnover/cost-bps are entry-side. Test count: 234.
+
 ### Next step
 
 Phase 0 is green. Next: Phase 1 S1 (gamma-regime) and S2 (0DTE VRP, defined-risk
 only), both behind the same gate, reusing the GEX/VRP features already built and
 tested. Then a paper ledger (`execution/`) matching the backtest record shape.
+Phase-1 also: add open_interest to the proposal (so options price OI in both gate
+and fills), and an open-MTM daily kill-switch in the live/paper path.

@@ -12,11 +12,7 @@ from __future__ import annotations
 
 from ..config import CostConfig
 from ..contracts import AssetKind, Side
-from ..costs import one_way_slippage
-
-
-def _trade_type(instrument: AssetKind) -> str:
-    return "option" if instrument is AssetKind.OPTION else "stock"
+from ..costs import commission, one_way_slippage
 
 
 def conservative_fill(
@@ -29,6 +25,7 @@ def conservative_fill(
     adv: float | None,
     config: CostConfig,
     is_entry: bool,
+    open_interest: int | None = None,
 ) -> tuple[float, float]:
     """Return ``(fill_price, leg_cost_usd)`` for one leg.
 
@@ -36,9 +33,9 @@ def conservative_fill(
     returned as ``leg_cost_usd`` = slippage dollars (adverse per-share move ×
     size × multiplier) + commission, so entry+exit leg costs sum to the gate's
     round-trip estimate and slippage is not double-counted in the price.
+    ``open_interest`` is threaded so option fills carry the same liquidity penalty
+    the gate priced in (it is ``None`` for stock).
     """
-    from engine import transaction_costs as tc  # lazy
-
     per_share = one_way_slippage(
         side=side,
         instrument=instrument,
@@ -46,10 +43,10 @@ def conservative_fill(
         spread=spread,
         size=size,
         adv=adv,
+        open_interest=open_interest,
         config=config,
         is_entry=is_entry,
     )
     mult = instrument.multiplier
     slippage_usd = abs(per_share) * size * mult
-    commission = tc.calculate_commission(_trade_type(instrument), size)
-    return next_open, slippage_usd + commission
+    return next_open, slippage_usd + commission(instrument, size, config)

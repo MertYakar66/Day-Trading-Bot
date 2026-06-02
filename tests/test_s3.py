@@ -75,7 +75,10 @@ def test_short_when_stretched_above_vwap(config):
     # Reward/risk geometry (per-unit, gross dollars).
     assert prop.reward_per_unit == pytest.approx(abs(vwap - ref))
     assert prop.risk_per_unit == pytest.approx(1.0 * sigma)
-    assert prop.win_prob == pytest.approx(0.50)
+    # win_prob = gambler's-ruin fair baseline (risk/(reward+risk)) + default edge
+    # (0.10). Here reward=2.0, risk=0.5 -> p_fair=0.2, win_prob=0.30.
+    assert prop.win_prob == pytest.approx(0.5 / 2.5 + 0.10)
+    assert prop.meta["p_fair"] == pytest.approx(0.20)
     assert prop.ts == AS_OF
     assert prop.meta["vwap_dev_sigma"] == pytest.approx(2.5)
     assert prop.meta["sigma"] == pytest.approx(sigma)
@@ -226,3 +229,19 @@ def test_adv_none_for_symbol_without_estimate(config):
     assert prop is not None  # IWM defaults to STOCK
     assert prop.symbol == "IWM"
     assert prop.adv is None
+
+
+@pytest.mark.swe
+def test_edge_zero_is_a_fair_bet_and_gate_blocks(config):
+    """With edge=0 the win_prob is the gambler's-ruin fair value, so gross EV is
+    exactly 0 and the gate must BLOCK once costs are subtracted (no rubber-stamp)."""
+    from intraday.authority.gate import ExpectancyGate
+    from intraday.contracts import Verdict
+
+    s3 = S3VwapOrb(edge=0.0)
+    prop = s3.propose(_row(last_price=500.0, vwap=498.0, vwap_sigma=0.5, vwap_dev_sigma=2.5), config=config)
+    assert prop is not None
+    res = ExpectancyGate(config).evaluate(prop, size=100)
+    assert res.ev_gross == pytest.approx(0.0, abs=1e-6)
+    assert res.ev_net < 0  # costs make a fair bet negative
+    assert res.verdict is Verdict.BLOCKED

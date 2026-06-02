@@ -100,3 +100,24 @@ def test_captures_edge_when_present_not_when_absent():
     gross_strong = sum(t.gross_pnl for t in strong.trades)
     assert gross_strong > 0
     assert gross_strong > gross_rw
+
+
+def test_engine_halts_on_feed_gap():
+    """A gapped feed must HALT the run (DESIGN §2.4), not be silently bridged."""
+    from dataclasses import replace as dc_replace
+
+    from intraday.data.provider import FeedGapError
+
+    cfg = EngineConfig.default()
+    base = SyntheticDataProvider(cfg.data, cfg.session)
+
+    class GappedProvider(SyntheticDataProvider):
+        def get_bars(self, symbol, day, interval="1m"):
+            bars = super().get_bars(symbol, day, interval)
+            holed = bars.frame.drop(bars.frame.index[120])  # drop one bar
+            return dc_replace(bars, frame=holed)
+
+    gp = GappedProvider(cfg.data, cfg.session)
+    bt = IntradayBacktester(cfg, gp, [S3VwapOrb()])
+    with pytest.raises(FeedGapError):
+        bt.run(["SPY"], START, START, "1m")

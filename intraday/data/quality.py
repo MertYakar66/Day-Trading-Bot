@@ -11,6 +11,9 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from ..timeutils import parse_interval
+from .provider import FeedGapError
+
 
 @dataclass(frozen=True)
 class LiquidityCheck:
@@ -54,3 +57,41 @@ def is_stale(
     """True if the most recent datum is older than ``max_age`` at ``as_of``
     (the DESIGN.md §2.4 freshness rule — halt rather than trade on stale data)."""
     return (pd.Timestamp(as_of) - pd.Timestamp(last_ts)) > max_age
+
+
+def detect_feed_gap(
+    index: pd.DatetimeIndex,
+    interval: str,
+    *,
+    max_gap_factor: float = 1.5,
+) -> tuple[pd.Timestamp, pd.Timestamp, pd.Timedelta] | None:
+    """Return the first ``(before, after, gap)`` where consecutive bars are spaced
+    more than ``max_gap_factor × interval`` apart, else ``None``. A gap means the
+    feed dropped bars — the runtime must not silently interpolate over it."""
+    if index is None or len(index) < 2:
+        return None
+    step = parse_interval(interval)
+    max_allowed = step * max_gap_factor
+    diffs = index[1:] - index[:-1]
+    for i in range(len(diffs)):
+        if diffs[i] > max_allowed:
+            return (index[i], index[i + 1], diffs[i])
+    return None
+
+
+def assert_no_feed_gap(
+    index: pd.DatetimeIndex,
+    interval: str,
+    *,
+    max_gap_factor: float = 1.5,
+) -> None:
+    """Raise :class:`FeedGapError` if the bar index has a gap (DESIGN §2.4: halt,
+    never guess). Called by the backtest/runtime before acting on a session."""
+    gap = detect_feed_gap(index, interval, max_gap_factor=max_gap_factor)
+    if gap is not None:
+        before, after, delta = gap
+        raise FeedGapError(
+            f"feed gap between {before} and {after} ({delta} > "
+            f"{interval}×{max_gap_factor}); halting per DESIGN §2.4 (no look-ahead "
+            "interpolation over missing bars)."
+        )

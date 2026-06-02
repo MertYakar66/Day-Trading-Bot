@@ -184,8 +184,11 @@ class SyntheticDataProvider(DataProvider):
         symbol = symbol.upper()
         path = self._underlying_path(symbol, day)
         open_utc, close_utc = session_bounds_utc(day, self.session)
+        # Start at the first canonical price timestamp (open + 1s) so every
+        # snapshot's spot is a real at-or-before-snapshot price (no 1s-future spot
+        # at the open). available_ts gating already prevents look-ahead use.
         snap_times = pd.date_range(
-            start=open_utc, end=close_utc, freq=f"{_CHAIN_SNAPSHOT_MIN}min"
+            start=path.index[0], end=close_utc, freq=f"{_CHAIN_SNAPSHOT_MIN}min"
         )
         spacing = _STRIKE_SPACING.get(symbol, 5.0)
         atm_iv = _ATM_IV.get(symbol, 0.15)

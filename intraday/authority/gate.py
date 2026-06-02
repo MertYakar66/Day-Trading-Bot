@@ -15,6 +15,13 @@ Verdicts mirror SWE's ``EnginePhaseReviewer``:
 This is the ONLY place a candidate becomes tradeable. Downgrade-only reviewers
 (:mod:`intraday.authority.reviewers`) may demote a PROCEED but never rescue a
 BLOCKED — the hard invariant from SWE ``CLAUDE.md`` §2, re-implemented here.
+
+EV basis (documented modeling choice): win/loss are derived from the decision-time
+``ref_price`` (the bar close), while the backtest enters at the next bar's open
+(conservative fill). On a driftless tape ``E[next_open] = ref_price``, so the
+certified ``ev_net`` is an unbiased PRE-FILL estimate; the realized entry differs
+by next-bar noise + slippage (already charged as cost). Treat ``ev_net`` as a
+pre-fill expectation, to be reconciled with realized PnL during paper validation.
 """
 
 from __future__ import annotations

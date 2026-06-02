@@ -21,19 +21,26 @@ no-look-ahead property tests, cost-model correctness, "gate refuses negative-EV"
 
 ## 2. Results — NET OF COSTS (synthetic month, SPY/QQQ via S3)
 
-| Metric | Value | Reading |
-|---|---|---|
-| Gross PnL | ≈ **+$73** (over 301 trades, ~$6M turnover) | ≈ 0 — *no edge, as expected* |
-| Total costs | **−$1,807** | the dominant term |
-| **Net PnL** | **−$1,734 (−1.8% of NAV)** | a naive control loses to costs |
-| Cost / round-trip | ~3 bps of notional, ~$6/trade | realistic for liquid ETFs |
-| Win rate | ~33% | matches gambler's-ruin for fading a 2σ stretch w/ 1σ stop |
-| Sharpe (net) | negative | unprofitable after costs (correct for a control) |
+The S3 control's win probability is the **gambler's-ruin fair baseline**
+(`p_fair = risk/(reward+risk)`, exactly 0 net-EV) plus an explicit, falsifiable
+`edge` (its mean-reversion thesis). Two regimes make the point:
+
+| `--edge` | Trades | Gross | Net | Reading |
+|---|---|---|---|---|
+| **0.0** (no edge claim) | **0** | $0 | $0 | the gate **refuses every trade** — a no-edge control cannot beat costs |
+| **0.10** (default thesis) | 244 | ≈ −$475 | −$1,926 (−1.9% NAV) | thesis is FALSE on a random walk → realized gross ≈ 0, net = costs |
+
+Cost per round-trip ≈ **3.0 bps of notional / ~$6 per trade** (realistic for liquid
+ETFs). Win rate ≈ 29% (near the ~1/3 gambler's-ruin value for fading a 2σ stretch
+with a 1σ stop). Sharpe is negative — correct for a control with no real edge.
 
 **These numbers are NOT an edge.** They are a *harness validation*. The synthetic
-price process is random-walk dominant (realistic minute-bar autocorrelation ≈ 0),
-so a naive VWAP-reversion control should — and does — produce ≈ 0 gross and a net
-loss equal to transaction costs.
+price process is random-walk dominant (realistic minute-bar autocorrelation ≈ 0).
+The `edge=0` result is the strongest single check: the net-of-cost gate, fed an
+honest no-edge probability, **blocks 100% of signals** — exactly its job. With an
+explicit edge thesis the engine trades; on efficient data the thesis is falsified
+and it loses to costs (the paper-first lesson), while on mean-reverting synthetic
+data an integration test confirms it turns a gross profit.
 
 ## 3. What is PROVEN vs ASSUMED
 
@@ -74,7 +81,28 @@ the same gate, reusing the GEX/VRP features already built and tested; then a pap
 ledger mirroring the backtest record shape. Do **not** promote anything to live —
 that is a separate, explicit decision with its own broker design (out of scope).
 
-## 6. Honesty caveats (read before trusting anything here)
+## 6. Adversarial review (addressed)
+
+A 6-lens adversarial review (look-ahead, costs, gate, accounting, honesty,
+completeness) found **no critical issues** and confirmed the guardrails hold. Items
+fixed in this branch:
+- **HIGH — win_prob defeated the gate**: replaced the flat 0.5 prior with the
+  gambler's-ruin fair baseline + explicit `edge` (above).
+- **HIGH — freshness/feed-gap HALT was stubbed**: wired `assert_no_feed_gap` into
+  the backtest (halts on a gapped feed, DESIGN §2.4) + tests.
+- **MED — tape/chain provenance not round-tripped**: store now persists + reads a
+  source sidecar and refuses to guess (real data can't be relabelled synthetic).
+- **MED — latent gate-vs-fill open_interest divergence**: threaded `open_interest`
+  through the fill path (consistent for Phase-1 options).
+- **LOW — dead/mis-scaled commission config, eod exit-cost omission, snapshot spot
+  edge, kill-switch budget guard, EV pre-fill basis**: fixed or documented.
+
+Remaining documented (non-blocking) limitations: the daily kill-switch trips on
+realized PnL (open-MTM kill is a Phase-1 paper-ledger enhancement); the gate's EV
+is a pre-fill estimate (unbiased on a driftless tape); turnover/cost-bps use
+entry-side notional.
+
+## 7. Honesty caveats (read before trusting anything here)
 
 - Synthetic performance says nothing about a real edge; it validates plumbing.
 - A real edge must be demonstrated out-of-sample on real data, net of costs, with

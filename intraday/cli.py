@@ -37,7 +37,7 @@ def _build_config(nav: float | None) -> EngineConfig:
 def cmd_backtest(args: argparse.Namespace) -> int:
     cfg = _build_config(args.nav)
     provider = SyntheticDataProvider(cfg.data, cfg.session)
-    strategies = [S3VwapOrb(entry_z=args.entry_z, stop_k=args.stop_k, win_prob=args.win_prob)]
+    strategies = [S3VwapOrb(entry_z=args.entry_z, stop_k=args.stop_k, edge=args.edge)]
     bt = IntradayBacktester(cfg, provider, strategies)
 
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
@@ -79,7 +79,11 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--nav", type=float, default=None, help="paper NAV (assumption)")
     bt.add_argument("--entry-z", dest="entry_z", type=float, default=2.0)
     bt.add_argument("--stop-k", dest="stop_k", type=float, default=1.0)
-    bt.add_argument("--win-prob", dest="win_prob", type=float, default=0.50)
+    bt.add_argument(
+        "--edge", dest="edge", type=float, default=0.10,
+        help="S3 mean-reversion edge over the gambler's-ruin fair baseline "
+             "(0.0 = no edge → gate refuses all trades)",
+    )
     bt.add_argument("--store", action="store_true", help="persist signals + ledger")
     bt.set_defaults(func=cmd_backtest)
     return p
