@@ -1,0 +1,17 @@
+# Runtime deps for the intraday engine.
+#
+# NOTE: the smart-wheel-engine (SWE) quant modules are a SEPARATE dependency,
+# not pip-installable from here. Wire them via git submodule (vendor/swe) or an
+# editable install — see README.md -> Dependencies and TASKS.md T0.0.
+
+numpy
+pandas
+scipy
+pyarrow
+statsmodels
+arch
+scikit-learn
+requests
+
+# dev / test
+pytest

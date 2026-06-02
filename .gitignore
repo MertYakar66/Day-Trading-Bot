@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets — never commit
+.env
+.envrc
+*creds*.txt
+*_credentials.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# NOTE: the regenerable parquet data store is ignored by data_store/.gitignore
+# (keeps the directory, ignores its contents). Do not add data_store/ here, or
+# that .gitignore itself would be ignored.

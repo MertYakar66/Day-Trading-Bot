@@ -1,0 +1,3 @@
+[submodule "vendor/swe"]
+	path = vendor/swe
+	url = https://github.com/MertYakar66/smart-wheel-engine.git

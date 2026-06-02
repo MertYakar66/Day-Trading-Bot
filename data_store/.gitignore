@@ -1,0 +1,5 @@
+# Regenerable intraday data — never commit (can be tens-to-hundreds of GB).
+# Bars, option tape, derived features, signal logs, and the paper ledger all
+# land here and are rebuilt from Theta. See ../DESIGN.md §2.3.
+*
+!.gitignore
