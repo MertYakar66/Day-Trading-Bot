@@ -41,15 +41,21 @@ intraday/
     sizing.py          #   fractional-Kelly (SWE) with hard caps
     stops.py           #   sigma/structural stop+target
 
-  signals/             # strategies
-    base.py            #   Strategy protocol
+  signals/             # strategies (all behind the one gate)
+    base.py            #   Strategy protocol (needs_options/needs_rv capability flags)
     s3_vwap_orb.py     #   T0.8 — S3 VWAP-reversion control
+    s1_gamma_regime.py #   T1.1 — S1 gamma-regime (fade/ride by GEX sign + OFI)
+    s2_zerodte_vrp.py  #   T1.2 — S2 0DTE VRP defined-risk iron condor
 
   backtest/            # T0.4 — event-driven replay
     fills.py           #   conservative next-bar fill model
-    engine.py          #   IntradayBacktester → BacktestResult
+    engine.py          #   IntradayBacktester → BacktestResult (directional + structured)
 
-  cli.py / __main__.py # `python -m intraday backtest ...`
+  execution/           # T1.3 — PAPER ONLY paper ledger
+    records.py         #   canonical fill/trade/signal serializers (shared w/ backtest)
+    paper_ledger.py    #   PaperLedger (record parity; persists to store)
+
+  cli.py / __main__.py # `python -m intraday backtest --strategy {s1,s2,s3} ...`
 ```
 
 ## The hard invariants (where they live)
@@ -72,13 +78,27 @@ indirectly), `performance_metrics` (metrics.py), `event_gate` + `event_calendar`
 ## Run it
 
 ```
-python -m intraday backtest --start 2026-05-01 --end 2026-05-29   # prints NET metrics
-pytest                                                            # full suite
+python -m intraday backtest --start 2026-05-01 --end 2026-05-29              # S3 control (NET metrics)
+python -m intraday backtest --symbols SPY --strategy s1 --start 2026-05-04 --end 2026-05-08
+python -m intraday backtest --symbols SPY --strategy s2 --start 2026-05-04 --end 2026-05-08
+pytest                                                                       # full suite (263 tests)
 ```
 
-## Extending (Phase 1)
+S1/S2 load option features (GEX/OFI/RV) per tick, so they are slower than the
+S3-only path; the expensive GEX solve is recomputed on a slow cadence
+(`DataConfig.gex_recompute_min`).
 
-Add S1/S2 as `signals/s1_gamma_regime.py` / `signals/s2_0dte_vrp.py` implementing
-the `Strategy` protocol; they consume the existing GEX/VRP features and flow
-through the same gate + reviewers. Wire a `RegimeFilterReviewer` hostile map for
-S1. Add `execution/paper_ledger.py` mirroring `BacktestResult` record shape.
+## Defined-risk structures (S2)
+
+S2 emits a *structured* proposal (`SignalProposal.win_amount`/`loss_amount`/
+`cost_override`) rather than a directional price geometry. The gate/sizing use the
+per-unit dollar economics; the engine settles such positions binary at the 0DTE
+close. To add another defined-risk structure, extend the structured branch in
+`backtest/engine.py` (currently shaped for the iron condor's center ± short_width).
+
+## Extending (Phase 2)
+
+Add single-name strategies implementing the `Strategy` protocol; they consume the
+same features and flow through the same gate + reviewers. Deferred items (see
+PROGRESS.md): thread `open_interest` into option proposals; an open-MTM daily
+kill-switch for the live path.

@@ -13,6 +13,8 @@ minutes-to-hours intraday decisions.
   package layout and where each invariant lives.
 - **Build log:** [`PROGRESS.md`](PROGRESS.md) — decisions, assumptions, data
   source, results, open items.
+- **Final report:** [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) — results net of
+  costs, proven vs assumed, and what a human must decide next.
 
 ## Quickstart
 
@@ -20,12 +22,16 @@ minutes-to-hours intraday decisions.
 python -m venv .venv && .venv/Scripts/activate          # Windows; use bin/activate on POSIX
 pip install -r requirements.txt
 pytest                                                   # full suite (network-free, synthetic)
-python -m intraday backtest --start 2026-05-01 --end 2026-05-29   # Phase-0 NET-of-costs report
+python -m intraday backtest --start 2026-05-01 --end 2026-05-29              # S3 control, NET report
+python -m intraday backtest --symbols SPY --strategy s1 --start 2026-05-04 --end 2026-05-08  # S1
+python -m intraday backtest --symbols SPY --strategy s2 --start 2026-05-04 --end 2026-05-08  # S2
 ```
 
-> **Status:** Phase 0 complete and green on `build/phase-0` (224 tests). **All
-> data is SYNTHETIC** (deterministic) — the Theta tier is FREE (no real intraday
-> data) and Theta is not touched during build sessions. See
+> **Status:** Phase 0 + Phase 1 complete and green on `main` (263 tests). The
+> gamma spine — S1 (gamma-regime), S2 (0DTE VRP, **defined-risk only**), S3
+> (VWAP control) — all run behind the one net-of-cost expectancy gate, plus a
+> paper ledger. **All data is SYNTHETIC** (deterministic) — the Theta tier is FREE
+> (no real intraday data) and Theta is not touched during build sessions; see
 > [`docs/THETA_TIER_PROBE.md`](docs/THETA_TIER_PROBE.md). Synthetic results are a
 > harness validation, **not an edge**.
 
