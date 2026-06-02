@@ -9,6 +9,25 @@ minutes-to-hours intraday decisions.
 - **Spec:** [`DESIGN.md`](DESIGN.md) — read this first.
 - **Build backlog:** [`TASKS.md`](TASKS.md) — ordered Phase 0 tasks with
   done-criteria. **Start here if you are an automated agent.**
+- **Code map:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the `intraday/`
+  package layout and where each invariant lives.
+- **Build log:** [`PROGRESS.md`](PROGRESS.md) — decisions, assumptions, data
+  source, results, open items.
+
+## Quickstart
+
+```bash
+python -m venv .venv && .venv/Scripts/activate          # Windows; use bin/activate on POSIX
+pip install -r requirements.txt
+pytest                                                   # full suite (network-free, synthetic)
+python -m intraday backtest --start 2026-05-01 --end 2026-05-29   # Phase-0 NET-of-costs report
+```
+
+> **Status:** Phase 0 complete and green on `build/phase-0` (224 tests). **All
+> data is SYNTHETIC** (deterministic) — the Theta tier is FREE (no real intraday
+> data) and Theta is not touched during build sessions. See
+> [`docs/THETA_TIER_PROBE.md`](docs/THETA_TIER_PROBE.md). Synthetic results are a
+> harness validation, **not an edge**.
 
 ## Dependencies
 

@@ -305,6 +305,17 @@ Every candidate signal flows through one gate; reviewers can only **downgrade**.
   vendor/swe/          # smart-wheel-engine dependency (git submodule)
 ```
 
+> **Implementation note (Phase 0).** The code lives under a single **`intraday/`**
+> package (`intraday/data/`, `intraday/features/`, …) rather than top-level
+> directories, to avoid a `PYTHONPATH` namespace collision with SWE's own
+> top-level `data/` and `backtests/` packages. The full module map is in
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The event-driven backtester is
+> **purpose-built** (`intraday/backtest/engine.py`) rather than a subclass of
+> SWE's `backtests/simulator.py` — that one is a daily, wheel-specific placeholder
+> coupled to `WheelTracker`; we reuse SWE's *quant* pieces (costs, pricer,
+> metrics, dealer, RV) and discipline patterns instead, and never modify SWE.
+> Rationale and the FREE-tier data reality are in [`PROGRESS.md`](PROGRESS.md).
+
 ---
 
 ## 10. Phased roadmap

@@ -1,5 +1,9 @@
 # Day-Trading-Bot — build backlog
 
+> **Status (2026-06-02): Phase 0 COMPLETE and green** on `build/phase-0`
+> (synthetic data — see `PROGRESS.md`). Phase 1 not started. Run the engine with
+> `python -m intraday backtest --start 2026-05-01 --end 2026-05-29`.
+
 Ordered tasks for building the intraday engine. **Do tasks in order**; each has
 explicit done-criteria. Read [`DESIGN.md`](DESIGN.md) before starting and
 [`README.md`](README.md) for the hard guardrails (repeated in §0 below).
