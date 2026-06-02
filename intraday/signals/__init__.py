@@ -4,6 +4,7 @@ Phase 1 behind the same gate."""
 from __future__ import annotations
 
 from .base import Strategy
+from .s1_gamma_regime import S1GammaRegime
 from .s3_vwap_orb import S3VwapOrb
 
-__all__ = ["Strategy", "S3VwapOrb"]
+__all__ = ["Strategy", "S1GammaRegime", "S3VwapOrb"]

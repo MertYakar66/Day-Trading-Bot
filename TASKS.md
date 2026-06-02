@@ -92,7 +92,10 @@ produces a cost-correct equity curve, gated, with a full metrics report.
 
 ## Phase 1 — The gamma spine (only after Phase 0 passes)
 
-- [ ] **T1.1 S1 Gamma-regime** (SPX/SPY) — `DESIGN.md` §5 S1.
+- [x] **T1.1 S1 Gamma-regime** (SPX/SPY) — `DESIGN.md` §5 S1. *Done:*
+      `intraday/signals/s1_gamma_regime.py`; engine computes GEX/OFI features per
+      tick (only when a strategy needs them); runs end-to-end through the gate;
+      tested (`tests/test_s1.py`, `tests/test_phase1.py`). See `PROGRESS.md`.
 - [ ] **T1.2 S2 0DTE vol relative-value** (SPX) — `DESIGN.md` §5 S2.
       *Defined-risk structures only; no naked short gamma.*
 - [ ] **T1.3 Paper ledger** (`execution/`) — log each gated signal as if filled,

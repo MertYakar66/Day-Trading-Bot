@@ -196,9 +196,22 @@ class SyntheticDataProvider(DataProvider):
         rng = np.random.default_rng(
             stable_seed(self.data.rng_seed + 101, symbol + "|chain", day)
         )
+        # Slowly-varying dealer-gamma skew so the GEX regime swings between
+        # long-gamma (calls dominate) and short-gamma (puts dominate) intraday and
+        # across days, instead of sitting on the gamma-flip forever. s>0 tilts call
+        # OI up / put OI down → positive net GEX; s<0 → negative net GEX.
+        day_bias = rng.uniform(-0.30, 0.30)
+        day_phase = rng.uniform(0.0, 2.0 * np.pi)
+        skew_amp = self.data.chain_gamma_skew
+        open_s = float((snap_times[0] - open_utc).total_seconds())
+        span_s = max(1.0, float((close_utc - open_utc).total_seconds()))
 
         rows: list[dict] = []
         for snap_ts in snap_times:
+            frac = float((snap_ts - open_utc).total_seconds()) / span_s
+            skew = float(
+                np.clip(day_bias + skew_amp * np.sin(2.0 * np.pi * 1.5 * frac + day_phase), -0.6, 0.6)
+            )
             # PIT-safe spot: the last canonical price at/before the snapshot.
             pos = path.index.searchsorted(snap_ts, side="right") - 1
             if pos < 0:
@@ -219,8 +232,9 @@ class SyntheticDataProvider(DataProvider):
                 put_center = spot * 0.99
                 call_oi = 4000.0 * np.exp(-((k - call_center) / (spot * 0.02)) ** 2)
                 put_oi = 4000.0 * np.exp(-((k - put_center) / (spot * 0.02)) ** 2)
-                call_oi *= round_boost * rng.uniform(0.85, 1.15)
-                put_oi *= round_boost * rng.uniform(0.85, 1.15)
+                # Dealer-gamma skew tilts the call/put OI balance (drives regime).
+                call_oi *= (1.0 + skew) * round_boost * rng.uniform(0.85, 1.15)
+                put_oi *= (1.0 - skew) * round_boost * rng.uniform(0.85, 1.15)
                 rows.append(
                     {
                         "snapshot_ts": snap_ts,
