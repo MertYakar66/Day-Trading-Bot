@@ -105,9 +105,13 @@ produces a cost-correct equity curve, gated, with a full metrics report.
       `tests/test_phase1.py`). NOTE: on a $100k account at the 1% per-trade risk
       cap, a *wide SPX* condor's max loss exceeds the budget so S2 correctly sizes
       to 0 on SPX (a real retail constraint — DESIGN §1); demonstrated on SPY.
-- [ ] **T1.3 Paper ledger** (`execution/`) — log each gated signal as if filled,
+- [x] **T1.3 Paper ledger** (`execution/`) — log each gated signal as if filled,
       mark-to-market on subsequent ticks; same record shape as the backtest so
-      live-vs-backtest divergence is measurable.
+      live-vs-backtest divergence is measurable. *Done:*
+      `intraday/execution/paper_ledger.py` + `records.py` (canonical schemas shared
+      with the backtest); `from_backtest` proves record parity; persists to the
+      `signals/` + `paper_ledger/` store partitions. PAPER ONLY — no broker. The
+      live streaming loop awaits real data + an explicit go-live decision.
 
 **Phase 1 exit:** all three strategies pass the §8 acceptance bar on paper
 (positive net-of-cost expectancy with confidence, drawdown within budget,

@@ -62,7 +62,21 @@ same gate). All still SYNTHETIC, paper-only.
   linkage), so S2's entry condition can actually occur. Set independently of PnL.
 - Tests: `tests/test_s2.py` + S2 cases in `tests/test_phase1.py`. Suite: 260.
 
-### Next (Phase 1): T1.3 paper ledger (live-shape record parity).
+### T1.3 paper ledger (shipped)
+
+- `intraday/execution/records.py` — canonical fill/trade/signal serializers used by
+  BOTH the backtest and the paper ledger, guaranteeing identical record shapes.
+- `intraday/execution/paper_ledger.py` — `PaperLedger` records gated signals "as if
+  filled" + resulting fills/trades/equity; `from_backtest` proves parity; `persist`
+  writes to the `signals/` + `paper_ledger/` store partitions (by day). PAPER ONLY,
+  no broker. A live streaming loop would feed the same `log_*` hooks tick-by-tick
+  (out of scope until real data + a go-live decision).
+- Tests: `tests/test_paper_ledger.py`.
+
+**Phase 1 complete (S1 + S2 + paper ledger), all behind the one expectancy gate.**
+
+### Next: harden / Phase 2 (equities) when desired; await operator decisions
+(Theta tier, paper NAV/PDT, acceptance thresholds).
 
 ---
 
