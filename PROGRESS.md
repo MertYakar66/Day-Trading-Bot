@@ -60,7 +60,20 @@ same gate). All still SYNTHETIC, paper-only.
 - **Synthetic realism**: ATM IV anchored to the realized-vol scale with a vol-risk
   premium COUPLED to the gamma skew (positive gamma ⇒ rich VRP — a real market
   linkage), so S2's entry condition can actually occur. Set independently of PnL.
-- Tests: `tests/test_s2.py` + S2 cases in `tests/test_phase1.py`. Suite: 260.
+- Tests: `tests/test_s2.py` + S2 cases in `tests/test_phase1.py`.
+
+**Adversarial review of S2 (4-lens) — addressed.** Found one HIGH and fixed it:
+`win_prob` was `p_fair + edge`, but `p_fair` (the credit/max-loss geometry
+break-even) is NOT the implied P(inside short strikes), so adding the edge
+*inflated* win_prob and EV (gate certified +$40 where the honest realized-model EV
+was −$46). Fixed: **`win_prob = p_real_inside`** — the realized-vol P(close inside
+the short strikes), the honest probability for the binary settlement. This is
+conservative (the binary overstates loss vs a real condor), so the gate now blocks
+unless the VRP edge is genuinely large (it blocked 106/112 signals on synthetic).
+Also fixed (LOW): eod-safety loop now settles a structured leftover correctly;
+removed a redundant net computation. Known forward-compat note: the structured
+entry/settlement path currently assumes the condor (center ± short_width) shape —
+a future structure type would extend it.
 
 ### T1.3 paper ledger (shipped)
 

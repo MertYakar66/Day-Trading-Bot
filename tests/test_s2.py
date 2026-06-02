@@ -74,20 +74,36 @@ def test_no_trade_too_close_to_session_close():
     assert s2.propose(late, config=EngineConfig.default()) is None
 
 
-def test_win_prob_is_fair_baseline_plus_vrp_edge():
-    """At p_fair the structure is a fair bet (gross EV 0); the edge is positive
-    because realized < implied vol."""
+def test_win_prob_is_realized_inside_probability():
+    """win_prob is the realized-vol P(inside short strikes) — the honest binary
+    win probability, NOT the inflated geometry break-even baseline."""
     s2 = S2ZeroDteVrp()
     p = s2.propose(_row(atm_iv=0.18, rv=0.10), config=EngineConfig.default())
     assert p is not None
+    assert p.win_prob == pytest.approx(p.meta["p_real_inside"])
+    # The geometry break-even (kept for transparency) makes gross EV exactly 0; we
+    # deliberately do NOT use it as win_prob (that would overstate EV).
     p_fair = p.meta["p_fair"]
-    edge = p.meta["vrp_edge"]
-    # Fair baseline makes gross EV exactly zero.
     fair_ev = p_fair * p.win_amount - (1 - p_fair) * p.loss_amount
     assert fair_ev == pytest.approx(0.0, abs=1e-6)
-    # VRP rich (iv >> rv) → positive edge → win_prob above fair.
-    assert edge > 0
-    assert p.win_prob == pytest.approx(min(0.99, max(0.01, p_fair + edge)))
+    # VRP rich (iv >> rv) → realized inside-prob exceeds implied → positive edge.
+    assert p.meta["vrp_edge"] > 0
+    assert p.win_prob > p.meta["p_impl_inside"]
+
+
+def test_no_edge_binary_is_negative_ev():
+    """Sanity: with realized == implied vol the binary condor has NEGATIVE gross EV
+    (it overstates loss vs a real condor), so win_prob=p_inside must yield EV<0 —
+    the gate would refuse it. (Constructed directly since propose requires VRP>0.)"""
+    from intraday.signals.s2_zerodte_vrp import _p_inside
+
+    # k_short = 1 sigma: p_inside ≈ 0.683; condor at fair credit loses on the binary.
+    sw = 60.0
+    p_inside = _p_inside(sw, sw)  # realized == implied (sigma_move == short_width)
+    # A representative fair-ish condor: credit small, max loss large (1σ short).
+    credit, max_loss = 9.0 * 100, 51.0 * 100
+    ev = p_inside * credit - (1 - p_inside) * max_loss
+    assert ev < 0
 
 
 def test_cost_override_accounts_four_legs_round_trip():

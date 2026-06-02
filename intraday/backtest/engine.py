@@ -219,7 +219,6 @@ class IntradayBacktester:
                     per_unit = pos.meta["win_per_unit"] if inside else -pos.meta["loss_per_unit"]
                     gross = per_unit * pos.size
                     costs = pos.entry_cost
-                    net = gross - costs
                     fill_ts = index[i]
                     reason = "settle_inside" if inside else "settle_outside"
                     fill_price = close_now
@@ -269,18 +268,27 @@ class IntradayBacktester:
                     continue
 
         # Safety: flatten anything still open at the last close (should be none,
-        # since the time-stop fires at flatten_at). Charge the exit cost too.
+        # since the time-stop / 0DTE settle fires at flatten_at). Handle structured
+        # and directional correctly so a leftover is never mis-priced.
         for sym in list(positions.keys()):
             pos = positions[sym]
             d = loaded[sym]
             fill_price = float(d["close"][n - 1])
-            _, exit_cost = conservative_fill(
-                side=pos.side, instrument=pos.instrument, next_open=fill_price,
-                spread=cfg.cost.fallback_spread_pct * fill_price, size=pos.size,
-                adv=pos.meta.get("adv"), config=cfg.cost, is_entry=False,
-            )
-            gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
-            costs = pos.entry_cost + exit_cost
+            if pos.meta.get("structured"):
+                inside = abs(fill_price - pos.meta["center"]) <= pos.meta["short_width"]
+                per_unit = pos.meta["win_per_unit"] if inside else -pos.meta["loss_per_unit"]
+                gross = per_unit * pos.size
+                costs = pos.entry_cost
+                reason = "settle_inside" if inside else "settle_outside"
+            else:
+                _, exit_cost = conservative_fill(
+                    side=pos.side, instrument=pos.instrument, next_open=fill_price,
+                    spread=cfg.cost.fallback_spread_pct * fill_price, size=pos.size,
+                    adv=pos.meta.get("adv"), config=cfg.cost, is_entry=False,
+                )
+                gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
+                costs = pos.entry_cost + exit_cost
+                reason = "eod_safety"
             net = gross - costs
             day_realized += net
             equity += net
@@ -289,7 +297,7 @@ class IntradayBacktester:
                       size=pos.size, instrument=pos.instrument, entry_ts=pos.entry_ts,
                       exit_ts=index[n - 1], entry_price=pos.entry_price,
                       exit_price=fill_price, gross_pnl=gross, costs=costs,
-                      net_pnl=net, exit_reason="eod_safety")
+                      net_pnl=net, exit_reason=reason)
             )
             del positions[sym]
 

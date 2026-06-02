@@ -122,11 +122,17 @@ class S2ZeroDteVrp:
         win_amount = credit_ps * 100.0                 # $ per spread
         loss_amount = max_loss_ps * 100.0
 
-        # Honest win probability: fair baseline (EV=0 under fair pricing) + VRP edge
-        # (realized vs implied P(inside short strikes)).
+        # Honest win probability for the BINARY settlement = the realized-vol
+        # P(close stays inside the short strikes). Using the realized distribution
+        # (not the geometry break-even) means the gate is never fed an inflated p:
+        # at no edge (realized == implied) the binary OVERSTATES loss vs a real
+        # condor, so EV is negative and the gate blocks; S2 only trades when the
+        # VRP edge (realized < implied) is large enough to overcome that
+        # conservatism AND costs. p_fair/p_impl are kept for transparency only.
+        p_impl_inside = _p_inside(short_width, sigma_impl)
+        p_real_inside = _p_inside(short_width, sigma_real)
+        win_prob = min(0.99, max(0.01, p_real_inside))
         p_fair = max_loss_ps / (credit_ps + max_loss_ps)
-        edge = _p_inside(short_width, sigma_real) - _p_inside(short_width, sigma_impl)
-        win_prob = min(0.99, max(0.01, p_fair + edge))
 
         # Explicit 4-leg round-trip cost (per spread) so the gate never understates.
         legs = [(sc, "call"), (lc, "call"), (sp, "put"), (lp, "put")]
@@ -166,7 +172,9 @@ class S2ZeroDteVrp:
                 "credit_ps": credit_ps,
                 "max_loss_ps": max_loss_ps,
                 "p_fair": p_fair,
-                "vrp_edge": edge,
+                "p_impl_inside": p_impl_inside,
+                "p_real_inside": p_real_inside,
+                "vrp_edge": p_real_inside - p_impl_inside,
                 "atm_iv": iv,
                 "rv": fr.rv,
                 "gex_total": fr.gex_total,
