@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intraday-engine"
+version = "0.0.0"
+description = "Standalone intraday day-trading decision engine (Phase 0). PAPER ONLY."
+requires-python = ">=3.11"
+readme = "README.md"
+# Runtime deps are pinned in requirements.txt (kept editable so the SWE
+# submodule's own requirements can be reconciled by hand). This table is
+# intentionally light; the project is run from source, not installed.
+dependencies = []
+
+[tool.setuptools]
+packages = ["intraday"]
+
+# --------------------------------------------------------------------------
+# pytest: make BOTH this repo (for `import intraday`) and the read-only SWE
+# dependency (for `import engine.*` / `import backtests.*`) importable without
+# any environment setup. This is the test-time half of TASKS.md T0.0.
+# --------------------------------------------------------------------------
+[tool.pytest.ini_options]
+pythonpath = [".", "vendor/swe"]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "no_lookahead: property test proving a feature/decision uses only data with timestamp <= t",
+    "cost_model: asserts transaction-cost correctness",
+    "gate: asserts the expectancy gate / downgrade-only reviewer contract",
+    "integration: full Phase-0 end-to-end replay",
+    "swe: requires the vendor/swe dependency to import",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
