@@ -95,6 +95,13 @@ class DataConfig:
     fv_weight: float = 0.85    # fair-value random-walk innovation (× per-sec sigma)
     dev_weight: float = 0.50   # mean-reverting deviation innovation
     ou_phi: float = 0.998      # per-second AR(1) persistence of the deviation
+    # Synthetic option-chain dealer-gamma skew amplitude: how strongly call vs put
+    # OI tilts intraday so the GEX regime actually swings long/short gamma (vs a
+    # perpetual near-flip). 0 ⇒ symmetric chain (always near-flip).
+    chain_gamma_skew: float = 0.45
+    # How often the backtest recomputes the (expensive) dealer GEX/flip/walls
+    # structure. The regime is slow-moving, so 30 min is ample and keeps runs fast.
+    gex_recompute_min: int = 30
 
 
 @dataclass(frozen=True)

@@ -41,7 +41,12 @@ from ..contracts import (
 from ..data.provider import DataProvider, asset_kind_for
 from ..data.quality import assert_no_feed_gap
 from ..features.base import FeatureRow
+from ..features.gex import gamma_structure_at
+from ..features.ofi import ofi_at
 from ..features.pipeline import FeaturePipeline
+from ..features.realized_vol import intraday_rv
+from ..features.vrp import atm_iv_at
+from ..contracts import GammaRegime
 from ..logging_config import get_logger
 from ..risk.sizing import kelly_size
 from ..signals.base import Strategy
@@ -90,6 +95,11 @@ class IntradayBacktester:
         self.reviewers = reviewers or default_reviewers(config)
         self.pipeline = FeaturePipeline(config)
         self.record_signals = record_signals
+        # Only load/compute option features (chain → GEX/walls/flip, tape → OFI)
+        # and intraday RV/VRP when a strategy actually consumes them — keeps the
+        # S3-only path fast and unchanged.
+        self._needs_options = any(getattr(s, "needs_options", False) for s in strategies)
+        self._needs_rv = any(getattr(s, "needs_rv", False) for s in strategies)
 
     # ------------------------------------------------------------------ #
     def run(
@@ -155,6 +165,7 @@ class IntradayBacktester:
             loaded[sym] = {
                 "bars": bars,
                 "frame": frame,
+                "interval": interval,
                 "open": frame["open"].to_numpy(),
                 "high": frame["high"].to_numpy(),
                 "low": frame["low"].to_numpy(),
@@ -165,6 +176,9 @@ class IntradayBacktester:
                 "sf": sf,
                 "or_known_i": or_known_i,
             }
+            if self._needs_options:
+                loaded[sym]["tape"] = self.provider.get_option_tape(sym, day)
+                loaded[sym]["snaps"] = self._precompute_snapshots(sym, day)
 
         ref = loaded[symbols[0]]
         index = ref["frame"].index
@@ -276,11 +290,71 @@ class IntradayBacktester:
         pos = index.searchsorted(we, side="left")
         return int(pos)
 
+    def _precompute_snapshots(self, sym: str, day: date) -> list[tuple]:
+        """Per-snapshot (available_ts, GammaStructure|None, atm_iv|None).
+
+        The dealer GEX/flip/walls solve is the expensive part (SWE re-prices the
+        chain across many spots to locate the flip), so we recompute it only every
+        ``gex_recompute_min`` minutes (the regime is slow-moving), reusing the
+        latest structure between. Each result is PIT-stamped by its snapshot's
+        ``available_ts`` so no value is used before it has arrived."""
+        chain = self.provider.get_option_chain(sym, day)
+        avail = sorted(pd.Timestamp(a) for a in pd.unique(chain.frame["available_ts"]))
+        if not avail:
+            return []
+        step = pd.Timedelta(minutes=self.config.data.gex_recompute_min)
+        out: list[tuple] = []
+        last_at = None
+        for at in avail:
+            if last_at is not None and (at - last_at) < step:
+                continue
+            last_at = at
+            gs = gamma_structure_at(
+                chain, at, expiry=day, ticker=sym,
+                risk_free_rate=self.config.gate.risk_free_rate,
+            )
+            out.append((at, gs, atm_iv_at(chain, at)))
+        return out
+
+    @staticmethod
+    def _latest_snap(snaps: list[tuple], as_of: pd.Timestamp):
+        """The most recent snapshot tuple available at ``as_of`` (PIT)."""
+        chosen = None
+        for at, gs, iv in snaps:
+            if at <= as_of:
+                chosen = (gs, iv)
+            else:
+                break
+        return chosen
+
     def _feature_row(self, sym: str, as_of: pd.Timestamp, d: dict, i: int) -> FeatureRow:
         dev = d["dev"][i]
         sigma = d["sigma"][i]
         orb_known = i >= d["or_known_i"]
         sf = d["sf"]
+
+        ofi = atm_iv = rv = vrp = gex_total = flip = flip_dist = ncw = npw = None
+        regime: GammaRegime | None = None
+        if "snaps" in d:
+            ofi = ofi_at(d["tape"], as_of, self.pipeline.ofi_lookback)
+            snap = self._latest_snap(d["snaps"], as_of)
+            if snap is not None:
+                gs, atm_iv = snap
+                if gs is not None:
+                    gex_total = gs.gex_total
+                    regime = gs.regime
+                    flip = gs.flip_level
+                    flip_dist = gs.flip_distance_pct
+                    ncw, npw = gs.nearest_call_wall, gs.nearest_put_wall
+            if self._needs_rv:
+                rv = intraday_rv(
+                    d["frame"].iloc[: i + 1], d["interval"],
+                    window=self.pipeline.rv_window, estimator=self.pipeline.rv_estimator,
+                    session=self.config.session,
+                )
+                if rv is not None and atm_iv is not None:
+                    vrp = atm_iv - rv
+
         return FeatureRow(
             symbol=sym,
             as_of=as_of,
@@ -291,6 +365,16 @@ class IntradayBacktester:
             orb_high=(sf.opening_range.high if orb_known else None),
             orb_low=(sf.opening_range.low if orb_known else None),
             orb_volume=(sf.opening_range.volume if orb_known else None),
+            ofi=ofi,
+            rv=rv,
+            atm_iv=atm_iv,
+            vrp=vrp,
+            gex_total=gex_total,
+            gamma_regime=regime,
+            flip_level=flip,
+            flip_distance_pct=flip_dist,
+            nearest_call_wall=ncw,
+            nearest_put_wall=npw,
             meta={},
         )
 

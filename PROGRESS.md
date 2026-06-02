@@ -6,6 +6,40 @@
 
 ---
 
+## Session 2026-06-02 — Phase 1 begins (build/phase-1)
+
+Phase 0 is green and merged to `main`, so Phase 1 started (DESIGN §5, behind the
+same gate). All still SYNTHETIC, paper-only.
+
+### T1.1 S1 gamma-regime (shipped)
+
+- `intraday/signals/s1_gamma_regime.py` — the spine. Two regime-conditioned modes:
+  **fade** toward VWAP in long-gamma when OFI is exhausting; **ride** a gamma-flip
+  break toward the nearest wall in short-gamma when OFI confirms; stand aside
+  near-flip/neutral. Trades the underlying (SPY/QQQ). Honest win_prob = fair
+  baseline + edge (same discipline as S3).
+- **Engine extension**: `IntradayBacktester` now computes option features
+  (GEX/flip/walls + OFI, and RV/VRP for S2) per tick *only when a strategy needs
+  them* (`needs_options`/`needs_rv` flags) — the S3-only path is unchanged and
+  fast. The expensive dealer-GEX solve is recomputed on a slow cadence
+  (`DataConfig.gex_recompute_min`, default 30 min; the regime is slow-moving),
+  PIT-stamped by snapshot `available_ts`.
+- **Synthetic realism**: added a slowly-varying dealer-gamma skew
+  (`DataConfig.chain_gamma_skew`) so the GEX regime actually swings between
+  long/short gamma instead of sitting on the flip (the chain was symmetric before,
+  so S1 stood aside on every tick). A realism choice, set independently of S1 PnL.
+- Result (1 synthetic week, SPY/QQQ): S1 trades (42 trades; gate blocked ~35% of
+  signals) and **loses to costs on random-walk data** — honest: the synthetic GEX
+  regime does not predict the random-walk path, so the gamma thesis is falsified
+  and the loss is ≈ costs, exactly like S3. S1's value here is proving the
+  gamma-spine plumbing end-to-end, not alpha on synthetic data.
+- Tests: `tests/test_s1.py` (geometry, both modes, stand-aside, fair-baseline) +
+  `tests/test_phase1.py` (end-to-end gated). Suite: 248 tests.
+
+### Next (Phase 1): T1.2 S2 0DTE VRP (defined-risk only), T1.3 paper ledger.
+
+---
+
 ## Session 2026-06-01/02 — Phase 0 foundation (build/phase-0)
 
 **Data source: SYNTHETIC (deterministic, seeded). No real market data.** The
