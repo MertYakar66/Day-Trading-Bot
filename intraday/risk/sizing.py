@@ -34,16 +34,17 @@ def kelly_size(proposal: SignalProposal, risk: RiskConfig | None = None) -> Sizi
     """Return a sized position for ``proposal`` under fractional-Kelly + caps."""
     risk = risk or RiskConfig()
     nav = risk.paper_nav
-    mult = proposal.instrument.multiplier
-    loss_per_unit = proposal.risk_per_unit
-    win_per_unit = proposal.reward_per_unit
+    # Per-unit gross dollars — works for directional trades and defined-risk
+    # structures alike (reward/risk_dollars resolve the multiplier / overrides).
+    loss_dollars = proposal.risk_dollars
+    win_dollars = proposal.reward_dollars
 
     from engine.risk_manager import calculate_kelly_fraction  # lazy
 
     f = calculate_kelly_fraction(
         win_rate=proposal.win_prob,
-        avg_win=max(win_per_unit, 1e-9),
-        avg_loss=max(loss_per_unit, 1e-9),
+        avg_win=max(win_dollars, 1e-9),
+        avg_loss=max(loss_dollars, 1e-9),
         kelly_fraction=risk.kelly_fraction,
     )
     if not math.isfinite(f) or f <= 0.0:
@@ -52,12 +53,12 @@ def kelly_size(proposal: SignalProposal, risk: RiskConfig | None = None) -> Sizi
     # Risk budget: the smaller of the Kelly allocation and the per-trade cap.
     risk_budget = min(f, risk.max_risk_per_trade_pct) * nav
 
-    if loss_per_unit <= 0.0:
+    if loss_dollars <= 0.0:
         return SizingResult(0, f, risk_budget, "no_stop_distance")
 
-    size_by_risk = risk_budget / (loss_per_unit * mult)
-    # Notional cap.
-    denom = max(proposal.ref_price * mult, 1e-9)
+    size_by_risk = risk_budget / loss_dollars
+    # Notional cap (underlying notional for directional; max loss for a structure).
+    denom = max(proposal.notional_per_unit, 1e-9)
     size_by_notional = (risk.max_position_notional_pct * nav) / denom
 
     size = int(math.floor(min(size_by_risk, size_by_notional)))

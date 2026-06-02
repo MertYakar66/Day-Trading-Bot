@@ -199,11 +199,19 @@ class OptionTape:
 class SignalProposal:
     """A strategy's per-unit trade idea (pre-sizing, pre-gate).
 
-    The strategy supplies the price geometry (reference / target / stop), a win
-    probability ``win_prob`` (``p``), the observed ``spread`` at the decision
-    time, and optional average daily volume ``adv`` for size-impact. Dollar
-    expectancy is derived by the gate from this geometry × size × multiplier — the
-    proposal itself is size-agnostic so the risk sizer can choose size first.
+    Two flavours, both gated identically by net-of-cost expectancy:
+
+    1. **Directional** (S1/S3): price geometry — ``ref_price``/``target_price``/
+       ``stop_price``. Per-unit gross dollars are ``reward/risk_per_unit ×
+       multiplier`` (e.g. shares × $/share).
+    2. **Defined-risk structure** (S2): the economics are given DIRECTLY as
+       ``win_amount`` (credit kept, $/unit) and ``loss_amount`` (max loss, $/unit,
+       a positive magnitude). For these, ``ref_price`` is the underlying spot and
+       ``cost_override`` carries the (multi-leg) round-trip cost so the gate does
+       not understate it. Settlement params live in ``meta["settlement"]``.
+
+    ``win_prob`` (``p``) is supplied either way. The proposal is size-agnostic so
+    the risk sizer chooses size first; the gate then evaluates EV at that size.
     """
 
     strategy_id: str
@@ -217,17 +225,48 @@ class SignalProposal:
     win_prob: float         # p ∈ [0, 1]
     spread: float           # observed bid-ask spread at ts (per share, $)
     adv: float | None = None  # avg daily volume (shares/contracts) for impact
+    # Defined-risk overrides (None ⇒ directional, derive from price geometry):
+    win_amount: float | None = None   # gross $ gain per unit if it wins
+    loss_amount: float | None = None  # gross $ loss per unit if it loses (>= 0)
+    cost_override: "CostBreakdown | None" = None  # explicit round-trip cost ($/unit-set)
     meta: Mapping = field(default_factory=dict)
 
     @property
     def reward_per_unit(self) -> float:
-        """Gross $ gain per share if the target is hit."""
+        """Gross $ gain per share if the target is hit (directional geometry)."""
         return abs(self.target_price - self.ref_price)
 
     @property
     def risk_per_unit(self) -> float:
-        """Gross $ loss per share if the stop is hit."""
+        """Gross $ loss per share if the stop is hit (directional geometry)."""
         return abs(self.ref_price - self.stop_price)
+
+    @property
+    def is_structured(self) -> bool:
+        """True for a defined-risk structure (credit/max-loss given directly)."""
+        return self.win_amount is not None and self.loss_amount is not None
+
+    @property
+    def reward_dollars(self) -> float:
+        """Gross $ gain PER UNIT (per contract/spread/share-lot) if it wins."""
+        if self.win_amount is not None:
+            return self.win_amount
+        return self.reward_per_unit * self.instrument.multiplier
+
+    @property
+    def risk_dollars(self) -> float:
+        """Gross $ loss PER UNIT if it loses (positive magnitude)."""
+        if self.loss_amount is not None:
+            return self.loss_amount
+        return self.risk_per_unit * self.instrument.multiplier
+
+    @property
+    def notional_per_unit(self) -> float:
+        """Capital basis per unit for the position-notional cap: the underlying
+        notional for a directional trade, or the defined max loss for a structure."""
+        if self.loss_amount is not None:
+            return self.loss_amount
+        return self.ref_price * self.instrument.multiplier
 
 
 @dataclass(frozen=True)

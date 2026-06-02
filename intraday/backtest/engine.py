@@ -208,12 +208,28 @@ class IntradayBacktester:
             for sym in list(positions.keys()):
                 pos = positions[sym]
                 d = loaded[sym]
-                reason = self._exit_reason(pos, d, i, ts, flatten_at)
-                if reason is None:
-                    continue
-                fill_price, exit_cost, fill_ts = self._exit_fill(pos, d, i, index, n)
-                gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
-                costs = pos.entry_cost + exit_cost
+                if pos.meta.get("structured"):
+                    # Defined-risk structure (S2): hold to near the 0DTE close, then
+                    # settle binary (keep credit inside short strikes, else capped
+                    # max loss). The round-trip cost was charged at entry.
+                    if ts < flatten_at and i + 1 < n:
+                        continue
+                    close_now = float(d["close"][i])
+                    inside = abs(close_now - pos.meta["center"]) <= pos.meta["short_width"]
+                    per_unit = pos.meta["win_per_unit"] if inside else -pos.meta["loss_per_unit"]
+                    gross = per_unit * pos.size
+                    costs = pos.entry_cost
+                    fill_ts = index[i]
+                    reason = "settle_inside" if inside else "settle_outside"
+                    fill_price = close_now
+                else:
+                    reason = self._exit_reason(pos, d, i, ts, flatten_at)
+                    if reason is None:
+                        continue
+                    fill_price, exit_cost, fill_ts = self._exit_fill(pos, d, i, index, n)
+                    gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
+                    costs = pos.entry_cost + exit_cost
+
                 net = gross - costs
                 day_realized += net
                 equity += net
@@ -228,7 +244,7 @@ class IntradayBacktester:
                 )
                 fills.append(
                     Fill(fill_ts, sym, _close_side(pos.side), pos.size, fill_price,
-                         "CLOSE", exit_cost, reason)
+                         "CLOSE", costs, reason)
                 )
                 del positions[sym]
                 if daily_budget > 0 and day_realized <= -daily_budget:
@@ -252,18 +268,27 @@ class IntradayBacktester:
                     continue
 
         # Safety: flatten anything still open at the last close (should be none,
-        # since the time-stop fires at flatten_at). Charge the exit cost too.
+        # since the time-stop / 0DTE settle fires at flatten_at). Handle structured
+        # and directional correctly so a leftover is never mis-priced.
         for sym in list(positions.keys()):
             pos = positions[sym]
             d = loaded[sym]
             fill_price = float(d["close"][n - 1])
-            _, exit_cost = conservative_fill(
-                side=pos.side, instrument=pos.instrument, next_open=fill_price,
-                spread=cfg.cost.fallback_spread_pct * fill_price, size=pos.size,
-                adv=pos.meta.get("adv"), config=cfg.cost, is_entry=False,
-            )
-            gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
-            costs = pos.entry_cost + exit_cost
+            if pos.meta.get("structured"):
+                inside = abs(fill_price - pos.meta["center"]) <= pos.meta["short_width"]
+                per_unit = pos.meta["win_per_unit"] if inside else -pos.meta["loss_per_unit"]
+                gross = per_unit * pos.size
+                costs = pos.entry_cost
+                reason = "settle_inside" if inside else "settle_outside"
+            else:
+                _, exit_cost = conservative_fill(
+                    side=pos.side, instrument=pos.instrument, next_open=fill_price,
+                    spread=cfg.cost.fallback_spread_pct * fill_price, size=pos.size,
+                    adv=pos.meta.get("adv"), config=cfg.cost, is_entry=False,
+                )
+                gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
+                costs = pos.entry_cost + exit_cost
+                reason = "eod_safety"
             net = gross - costs
             day_realized += net
             equity += net
@@ -272,7 +297,7 @@ class IntradayBacktester:
                       size=pos.size, instrument=pos.instrument, entry_ts=pos.entry_ts,
                       exit_ts=index[n - 1], entry_price=pos.entry_price,
                       exit_price=fill_price, gross_pnl=gross, costs=costs,
-                      net_pnl=net, exit_reason="eod_safety")
+                      net_pnl=net, exit_reason=reason)
             )
             del positions[sym]
 
@@ -410,7 +435,31 @@ class IntradayBacktester:
                 )
             if not gres.tradeable:
                 continue
-            # Open at next bar's open with adverse slippage.
+
+            if prop.is_structured:
+                # Defined-risk structure (S2): entered "now" for the gate's
+                # round-trip cost; settled at the 0DTE close (no underlying fill).
+                entry_cost = gres.cost.total
+                pos = Position(
+                    symbol=sym, strategy_id=prop.strategy_id, side=prop.side,
+                    size=sizing.size, instrument=prop.instrument,
+                    decision_ts=fr.as_of, entry_ts=fr.as_of, entry_price=prop.ref_price,
+                    target_price=prop.target_price, stop_price=prop.stop_price,
+                    entry_cost=entry_cost, flatten_at=flatten_at,
+                    meta={
+                        "structured": True,
+                        "center": prop.meta["center"],
+                        "short_width": prop.meta["short_width"],
+                        "win_per_unit": prop.win_amount,
+                        "loss_per_unit": prop.loss_amount,
+                    },
+                )
+                positions[sym] = pos
+                fills.append(Fill(fr.as_of, sym, prop.side, sizing.size,
+                                  prop.ref_price, "OPEN", entry_cost, prop.strategy_id))
+                return True
+
+            # Directional: open at next bar's open with adverse slippage.
             nxt_open = float(d["open"][i + 1])
             fill_price, entry_cost = conservative_fill(
                 side=prop.side, instrument=prop.instrument, next_open=nxt_open,

@@ -191,7 +191,6 @@ class SyntheticDataProvider(DataProvider):
             start=path.index[0], end=close_utc, freq=f"{_CHAIN_SNAPSHOT_MIN}min"
         )
         spacing = _STRIKE_SPACING.get(symbol, 5.0)
-        atm_iv = _ATM_IV.get(symbol, 0.15)
         latency = pd.Timedelta(milliseconds=self.data.chain_latency_ms)
         rng = np.random.default_rng(
             stable_seed(self.data.rng_seed + 101, symbol + "|chain", day)
@@ -203,8 +202,18 @@ class SyntheticDataProvider(DataProvider):
         day_bias = rng.uniform(-0.30, 0.30)
         day_phase = rng.uniform(0.0, 2.0 * np.pi)
         skew_amp = self.data.chain_gamma_skew
-        open_s = float((snap_times[0] - open_utc).total_seconds())
         span_s = max(1.0, float((close_utc - open_utc).total_seconds()))
+
+        # ATM IV anchored to the path's realized-vol scale. The vol risk premium is
+        # COUPLED to the dealer-gamma skew: when gamma is positive (skew>0,
+        # vol-suppressing) IV is rich vs realized (VRP>0), and when gamma is short
+        # (skew<0) VRP is negative. This is a real market linkage (long-gamma
+        # suppresses realized vol, making IV look rich) and it is what lets S2
+        # (rich VRP + positive gamma) ever trigger. A realism choice, independent
+        # of S2 PnL. Mean premium modestly positive (IV usually ≥ realized).
+        base_rv = _DAILY_SIGMA.get(asset_kind_for(symbol), 0.012) * np.sqrt(252.0)
+        iv_day = rng.uniform(-0.06, 0.06)
+        vrp_mean, vrp_coupling = 0.05, 0.55  # fractions of base_rv
 
         rows: list[dict] = []
         for snap_ts in snap_times:
@@ -212,6 +221,9 @@ class SyntheticDataProvider(DataProvider):
             skew = float(
                 np.clip(day_bias + skew_amp * np.sin(2.0 * np.pi * 1.5 * frac + day_phase), -0.6, 0.6)
             )
+            atm_iv = float(np.clip(
+                base_rv * (1.0 + vrp_mean + iv_day + vrp_coupling * skew), 0.05, 1.5,
+            ))
             # PIT-safe spot: the last canonical price at/before the snapshot.
             pos = path.index.searchsorted(snap_ts, side="right") - 1
             if pos < 0:

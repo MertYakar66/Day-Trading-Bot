@@ -96,11 +96,22 @@ produces a cost-correct equity curve, gated, with a full metrics report.
       `intraday/signals/s1_gamma_regime.py`; engine computes GEX/OFI features per
       tick (only when a strategy needs them); runs end-to-end through the gate;
       tested (`tests/test_s1.py`, `tests/test_phase1.py`). See `PROGRESS.md`.
-- [ ] **T1.2 S2 0DTE vol relative-value** (SPX) — `DESIGN.md` §5 S2.
-      *Defined-risk structures only; no naked short gamma.*
-- [ ] **T1.3 Paper ledger** (`execution/`) — log each gated signal as if filled,
+- [x] **T1.2 S2 0DTE vol relative-value** — `DESIGN.md` §5 S2.
+      *Defined-risk structures only; no naked short gamma.* *Done:*
+      `intraday/signals/s2_zerodte_vrp.py` — a defined-risk short iron condor gated
+      by VRP-rich + positive net GEX; priced from the chain via BSM; honest
+      win_prob = fair baseline + VRP edge; explicit 4-leg round-trip cost; settled
+      binary at the 0DTE close by the engine. Tested (`tests/test_s2.py`,
+      `tests/test_phase1.py`). NOTE: on a $100k account at the 1% per-trade risk
+      cap, a *wide SPX* condor's max loss exceeds the budget so S2 correctly sizes
+      to 0 on SPX (a real retail constraint — DESIGN §1); demonstrated on SPY.
+- [x] **T1.3 Paper ledger** (`execution/`) — log each gated signal as if filled,
       mark-to-market on subsequent ticks; same record shape as the backtest so
-      live-vs-backtest divergence is measurable.
+      live-vs-backtest divergence is measurable. *Done:*
+      `intraday/execution/paper_ledger.py` + `records.py` (canonical schemas shared
+      with the backtest); `from_backtest` proves record parity; persists to the
+      `signals/` + `paper_ledger/` store partitions. PAPER ONLY — no broker. The
+      live streaming loop awaits real data + an explicit go-live decision.
 
 **Phase 1 exit:** all three strategies pass the §8 acceptance bar on paper
 (positive net-of-cost expectancy with confidence, drawdown within budget,

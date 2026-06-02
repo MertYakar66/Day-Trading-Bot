@@ -37,11 +37,10 @@ def test_atm_iv_in_sane_band_after_snapshot(spy_chain, day):
     iv = atm_iv_at(spy_chain, as_of)
     assert iv is not None
     assert isinstance(iv, float)
-    # SPY anchor ATM IV is 0.13; the strike-nearest-spot average stays a sane,
-    # well-defined annualized vol.
+    # ATM IV is anchored to the realized-vol scale with a vol-risk-premium that
+    # swings with the gamma skew (see synthetic.py), so it sits in a sane band
+    # around realized vol rather than a fixed anchor.
     assert 0.05 <= iv <= 0.6
-    # It should be in the neighbourhood of the configured anchor, not garbage.
-    assert iv == pytest.approx(0.13, abs=0.1)
 
 
 def test_atm_iv_none_before_first_snapshot_available(spy_chain, day):
