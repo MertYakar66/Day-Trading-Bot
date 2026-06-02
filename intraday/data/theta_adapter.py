@@ -1,24 +1,27 @@
-"""Real-Theta data adapter — wired to SWE's connector, but NOT connected here.
+"""Real-Theta data adapter — OPTIONS ONLY, and NOT connected this session.
 
-This is the drop-in real-data path. It wraps the read-only SWE
-``engine.theta_connector.ThetaConnector`` so that, on a properly-subscribed
-laptop with the Terminal up, the engine could pull live intraday data through the
-same :class:`DataProvider` interface the synthetic provider implements.
+CORRECTED DATA-TIER REALITY (supersedes the earlier "Theta serves intraday
+stock/index" assumption — see PROGRESS.md "Real-data tier correction"):
 
-THIS SESSION IT NEVER CONNECTS. Two independent reasons (see PROGRESS.md and the
-``no-theta-this-session`` memory):
+- **Theta OPTIONS = STANDARD** → intraday option TICK tape + IV + 1st-order
+  greeks, 2016→today. This is the ONLY real data Theta provides to this engine.
+- **Theta STOCK = FREE** → end-of-day only; NO intraday stock.
+- **Theta INDEX (SPX/VIX) = FREE** → no access at all.
 
-1. The operator uses the Theta subscription concurrently; our pulls would
-   throttle theirs. So we must not open a socket to ``127.0.0.1:25503``.
-2. The subscription tier is FREE — capability probing showed only
-   ``/v3/stock/history/eod`` is unlocked; SPX/VIX index, real-time/intraday
-   stock, the stock trade tape, and all option data are gated behind
-   STANDARD/VALUE. So real intraday data is unavailable regardless.
+Therefore Theta is an **options-only** provider here. The UNDERLYING (SPY/QQQ
+stock; SPX/VIX index) comes from IBKR (:class:`intraday.data.ibkr.IBKRDataProvider`)
+or, for deep history, put-call parity (:mod:`intraday.data.parity`) — never from
+Theta. :meth:`get_bars` accordingly raises a *structural* error (wrong source),
+not a tier error.
 
-Accordingly every method raises a clear exception unless ``allow_connect=True``
-is explicitly passed (a deliberate future opt-in), and even then intraday/option
-methods raise :class:`TierUnavailable` documenting the required tier. The class
-is fully importable and unit-testable without ever touching the network.
+THIS SESSION IT NEVER CONNECTS. The operator uses the Theta subscription
+concurrently, so we must not open a socket to ``127.0.0.1:25503`` or throttle
+their pulls. Every option method raises :class:`ThetaNotConnectedThisSession`
+unless ``allow_connect=True`` is explicitly passed (a deliberate future opt-in on
+a STANDARD-tier laptop with the Terminal up). The class is fully importable and
+unit-testable without ever touching the network. The scoped historical options
+pull is delivered as an operator runbook (``docs/OPERATOR_RUNBOOK.md`` +
+``scripts/pull_theta_options_scoped.py``), not executed here.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from datetime import date
 
 from ..contracts import BarSeries, DataSource, OptionChainSeries, OptionTape
 from ..logging_config import get_logger
-from .provider import DataProvider, TierUnavailable
+from .provider import DataProvider, DataUnavailable
 
 logger = get_logger(__name__)
 
@@ -39,7 +42,13 @@ class ThetaNotConnectedThisSession(RuntimeError):
 
 
 class ThetaDataProvider(DataProvider):
-    """Adapter over SWE ``engine.theta_connector`` (kept disconnected by default)."""
+    """Adapter over SWE ``engine.theta_connector`` — OPTIONS ONLY, disconnected.
+
+    Wraps the read-only SWE connector so that, on a STANDARD-tier laptop with the
+    Terminal up, the engine could pull live/historical option tape, chains, IV and
+    greeks through the same :class:`DataProvider` interface the synthetic provider
+    implements. Underlying bars are NOT a Theta responsibility (see module docs).
+    """
 
     source = DataSource.THETA
 
@@ -51,22 +60,13 @@ class ThetaDataProvider(DataProvider):
     def _guard(self) -> None:
         if not self.allow_connect:
             raise ThetaNotConnectedThisSession(
-                "Theta access is disabled this session (operator uses the "
-                "subscription concurrently; tier is FREE so intraday data is "
-                "gated). Use SyntheticDataProvider. To enable the real path "
-                "deliberately, construct ThetaDataProvider(allow_connect=True) "
-                "on a STANDARD-tier laptop with the Terminal up."
+                "Theta access is disabled this session (the operator uses the "
+                "STANDARD options subscription concurrently; our pulls would "
+                "throttle theirs). Use captured data via StoreBackedProvider, or "
+                "construct ThetaDataProvider(allow_connect=True) deliberately on a "
+                "STANDARD-tier laptop with the Terminal up. See "
+                "docs/OPERATOR_RUNBOOK.md for the scoped historical pull."
             )
-
-    def _connector_or_raise(self):  # pragma: no cover - never run this session
-        self._guard()
-        if self._connector is None:
-            # Imported lazily so the module is usable without the SWE dep present
-            # and so importing this file never triggers SWE's heavy package init.
-            from engine.theta_connector import ThetaConnector  # type: ignore
-
-            self._connector = ThetaConnector()
-        return self._connector
 
     # ------------------------------------------------------------------ #
     # DataProvider interface
@@ -78,23 +78,35 @@ class ThetaDataProvider(DataProvider):
         return _td(start, end)
 
     def get_bars(self, symbol: str, day: date, interval: str = "1m") -> BarSeries:
-        self._guard()
-        # FREE tier exposes only /v3/stock/history/eod (daily) — never intraday.
-        raise TierUnavailable(
-            f"intraday {interval} bars for {symbol} require Theta STANDARD "
-            f"(FREE unlocks only EOD stock history). Source: {_THETA_BASE_URL}."
+        # STRUCTURAL correction: Theta is options-only here. The underlying does
+        # NOT come from Theta at any tier (stock=FREE/EOD, index=unavailable), so
+        # this is a wrong-source error, not a tier upsell.
+        raise DataUnavailable(
+            f"Theta does not serve underlying bars for {symbol}: it is an "
+            "OPTIONS-ONLY source here (stock is FREE/EOD-only; index is "
+            "unavailable). Get the underlying from IBKRDataProvider (intraday) or "
+            "put-call parity (deep history). See PROGRESS.md 'Real-data tier "
+            "correction'."
         )
 
     def get_option_chain(self, symbol: str, day: date) -> OptionChainSeries:
+        # The real Theta options path (STANDARD). Disconnected this session.
         self._guard()
-        raise TierUnavailable(
-            f"option-chain snapshots for {symbol} require Theta STANDARD "
-            "(option data is not in the FREE tier)."
-        )
+        return self._fetch_not_wired("option_chain", symbol)  # pragma: no cover
 
     def get_option_tape(self, symbol: str, day: date) -> OptionTape:
+        # The real Theta options path (STANDARD). Disconnected this session.
         self._guard()
-        raise TierUnavailable(
-            f"option tape for {symbol} requires Theta STANDARD "
-            "(scripts/pull_theta_option_tape.py; not in the FREE tier)."
+        return self._fetch_not_wired("option_tape", symbol)  # pragma: no cover
+
+    def _fetch_not_wired(self, what: str, symbol: str):  # pragma: no cover - never run
+        # allow_connect=True is a deliberate operator opt-in. The live Theta pull is
+        # intentionally NOT wired in-engine: it is performed out-of-band by the
+        # scoped operator pull (docs/OPERATOR_RUNBOOK.md +
+        # scripts/pull_theta_options_scoped.py, over SWE's tape puller) and then
+        # replayed via StoreBackedProvider. We refuse to fabricate connector I/O.
+        raise NotImplementedError(
+            f"live Theta {what} fetch for {symbol} is not wired in-engine by "
+            "design; run the scoped operator pull (docs/OPERATOR_RUNBOOK.md) and "
+            "replay the captured data via StoreBackedProvider(source=DataSource.THETA)."
         )

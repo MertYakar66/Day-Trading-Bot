@@ -53,10 +53,13 @@ class MetricsReport:
         return asdict(self)
 
     def render(self) -> str:
-        synth = "  *** SYNTHETIC DATA — NOT A REAL EDGE ***" if self.data_source == "synthetic" else ""
+        if self.data_source == "synthetic":
+            tag = "  *** SYNTHETIC DATA — NOT A REAL EDGE ***"
+        else:
+            tag = f"  [REAL DATA: {self.data_source}]"
         lines = [
             "=" * 64,
-            f" Intraday Phase-0 backtest — metrics report{synth}",
+            f" Intraday backtest — metrics report{tag}",
             "=" * 64,
             f" data source        : {self.data_source}",
             f" trading days       : {self.n_days}",

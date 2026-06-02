@@ -1,15 +1,41 @@
 """Intraday data layer: PIT-aware providers + the partitioned parquet store.
 
+The corrected real-data architecture (PROGRESS.md "Real-data tier correction"):
+no single feed has everything, so providers compose behind one interface —
+underlying from IBKR (recent/live) → put-call parity (deep history) →
+free-daily (context); options from Theta (STANDARD); synthetic as the test fixture.
+
 Public surface:
 - :class:`DataProvider` — the abstract feed interface.
 - :class:`SyntheticDataProvider` — deterministic, labelled-synthetic workhorse.
-- :class:`ThetaDataProvider` — real-Theta adapter (disconnected this session).
+- :class:`IBKRDataProvider` — real underlying intraday bars (reads only).
+- :class:`ParityUnderlyingProvider` — underlying via put-call parity (deep history).
+- :class:`StoreBackedProvider` — replay captured data from the store (CI-safe).
+- :class:`FusedDataProvider` — composite (underlying fallbacks + Theta options).
+- :class:`ThetaDataProvider` — real-Theta OPTIONS adapter (disconnected this session).
 - :class:`ParquetStore` — the ``ticker=/date=`` parquet store (DESIGN §2.3).
 - quality predicates + exceptions.
 """
 
 from __future__ import annotations
 
+from .fused import FusedDataProvider
+from .ibkr import (
+    IBKR_CONTRACTS,
+    IBKRClient,
+    IBKRContract,
+    IBKRDataProvider,
+    bars_by_day,
+    ingest_payload,
+    payload_to_frame,
+)
+from .parity import (
+    ParityUnderlyingProvider,
+    forward_from_parity,
+    implied_spot,
+    reconstruct_spot,
+    spot_from_forward,
+)
 from .provider import (
     DataProvider,
     DataUnavailable,
@@ -26,6 +52,7 @@ from .quality import (
     spread_bps,
 )
 from .store import ParquetStore
+from .store_provider import StoreBackedProvider
 from .synthetic import SyntheticDataProvider
 from .theta_adapter import ThetaDataProvider, ThetaNotConnectedThisSession
 
@@ -36,6 +63,20 @@ __all__ = [
     "FeedGapError",
     "asset_kind_for",
     "SyntheticDataProvider",
+    "IBKRDataProvider",
+    "IBKRClient",
+    "IBKRContract",
+    "IBKR_CONTRACTS",
+    "payload_to_frame",
+    "bars_by_day",
+    "ingest_payload",
+    "ParityUnderlyingProvider",
+    "forward_from_parity",
+    "spot_from_forward",
+    "implied_spot",
+    "reconstruct_spot",
+    "StoreBackedProvider",
+    "FusedDataProvider",
     "ThetaDataProvider",
     "ThetaNotConnectedThisSession",
     "ParquetStore",

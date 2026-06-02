@@ -25,3 +25,7 @@ env/
 # NOTE: the regenerable parquet data store is ignored by data_store/.gitignore
 # (keeps the directory, ignores its contents). Do not add data_store/ here, or
 # that .gitignore itself would be ignored.
+
+# Raw vendor data pulls (large, regenerable from IBKR/Theta — never committed).
+# Small captured slices used as test fixtures live under tests/fixtures/ instead.
+data_raw/
