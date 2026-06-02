@@ -1,0 +1,47 @@
+name: ci
+
+# Keeps `main` releasable: the full pytest suite (incl. the SWE-dependent quant
+# adapters) must pass. All tests are network-free and use synthetic data only —
+# no Theta, no broker.
+
+on:
+  push:
+    branches: [main, "build/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with vendor/swe submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # The default GITHUB_TOKEN can only read THIS repo. If the
+          # smart-wheel-engine submodule is private, create a repo-scoped PAT with
+          # read access to it and add it as the secret SWE_SUBMODULE_TOKEN; the
+          # line below then authenticates the submodule fetch. (Public submodule
+          # needs no token.)
+          token: ${{ secrets.SWE_SUBMODULE_TOKEN || github.token }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify SWE dependency imports
+        run: python -c "import sys; sys.path.insert(0,'vendor/swe'); import engine.transaction_costs, engine.dealer_positioning, backtests.simulator; print('SWE imports OK')"
+
+      - name: Run test suite
+        run: pytest -q
+
+      - name: Smoke-run the Phase-0 backtest
+        run: python -m intraday backtest --start 2026-05-04 --end 2026-05-08
