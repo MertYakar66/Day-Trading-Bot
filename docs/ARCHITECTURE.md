@@ -24,7 +24,9 @@ intraday/
   data/                # T0.1/T0.2 + real-data path — the data layer
     provider.py        #   DataProvider ABC + asset-kind registry + exceptions
     synthetic.py       #   SyntheticDataProvider (deterministic; the test fixture)
-    ibkr.py            #   IBKRDataProvider — REAL underlying bars (reads only) + grid remap
+    _remap.py          #   SHARED start→close canonical-grid remap (ffill-only; no-look-ahead)
+    ibkr.py            #   IBKRDataProvider — REAL underlying bars (reads only)
+    yahoo.py           #   YahooDataProvider — FREE real intraday underlying (reads only)
     parity.py          #   ParityUnderlyingProvider — underlying via put-call parity (deep hist)
     store_provider.py  #   StoreBackedProvider — offline replay of captured data (CI-safe)
     fused.py           #   FusedDataProvider — underlying fallbacks + Theta options
@@ -32,6 +34,13 @@ intraday/
     store.py           #   ParquetStore (ticker=/date= layout, DESIGN §2.3)
     quality.py         #   liquidity / staleness predicates
     # corrected data tiers + how-to: docs/REAL_DATA.md, docs/OPERATOR_RUNBOOK.md
+
+  eval/                # honesty harness (anti-overfitting)
+    stats.py           #   clustered-t, bootstrap CI, Probabilistic/Deflated Sharpe (Bailey-LdP)
+    walkforward.py     #   chronological / walk-forward splits (leakage-free OOS)
+
+  live/                # read-only single-shot paper poll (NO orders)
+    poller.py          #   LivePoller: snapshot → PIT features → gate → reviewers → paper decision
 
   features/            # T0.3 — causal, PIT-sampled feature builders
     base.py            #   FeatureRow + latest_value PIT sampler
@@ -51,6 +60,8 @@ intraday/
     s3_vwap_orb.py     #   T0.8 — S3 VWAP-reversion control
     s1_gamma_regime.py #   T1.1 — S1 gamma-regime (fade/ride by GEX sign + OFI)
     s2_zerodte_vrp.py  #   T1.2 — S2 0DTE VRP defined-risk iron condor
+    s4_orb_breakout.py #   S4 — opening-range breakout (momentum; underlying-only)
+    s5_vwap_momentum.py#   S5 — VWAP momentum / trend (mirror of S3; underlying-only)
 
   backtest/            # T0.4 — event-driven replay
     fills.py           #   conservative next-bar fill model

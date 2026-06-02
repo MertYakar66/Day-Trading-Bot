@@ -27,12 +27,15 @@ from .metrics import build_report
 from .signals.s1_gamma_regime import S1GammaRegime
 from .signals.s2_zerodte_vrp import S2ZeroDteVrp
 from .signals.s3_vwap_orb import S3VwapOrb
+from .signals.s4_orb_breakout import S4OpeningRangeBreakout
+from .signals.s5_vwap_momentum import S5VwapMomentum
 
 logger = get_logger("intraday.cli")
 
 # CLI provider name → the DataSource its store partitions were written with.
 _STORE_SOURCES: dict[str, DataSource] = {
     "ibkr-store": DataSource.IBKR,
+    "yahoo-store": DataSource.YAHOO,
     "theta-store": DataSource.THETA,
 }
 
@@ -62,8 +65,12 @@ def _build_strategies(names: list[str], edge: float, entry_z: float, stop_k: flo
             built.append(S2ZeroDteVrp())
         elif n == "s3":
             built.append(S3VwapOrb(entry_z=entry_z, stop_k=stop_k, edge=edge))
+        elif n == "s4":
+            built.append(S4OpeningRangeBreakout(edge=edge))
+        elif n == "s5":
+            built.append(S5VwapMomentum(entry_z=entry_z, stop_k=stop_k, edge=edge))
         else:
-            raise SystemExit(f"unknown strategy {n!r} (choose from s1/s2/s3)")
+            raise SystemExit(f"unknown strategy {n!r} (choose from s1..s5)")
     return built
 
 
@@ -72,6 +79,24 @@ def _build_config(nav: float | None) -> EngineConfig:
     if nav is not None:
         cfg = replace(cfg, risk=replace(cfg.risk, paper_nav=nav))
     return cfg
+
+
+def _render_eval(result, *, n_trials: int) -> str:
+    """A concise honesty scorecard appended to the report (clustered-t over trading
+    days, bootstrap-CI Sharpe, and the multiple-testing-aware Deflated Sharpe)."""
+    from .eval import evaluate_result
+
+    ev = evaluate_result(result, n_trials=n_trials)
+    return "\n".join([
+        " honesty scorecard (net, clustered by trading day)",
+        "-" * 64,
+        f" trading-day t-stat : {ev.t_stat:.2f}  (p={ev.p_value:.3f}, n={ev.n_days} days)",
+        f" Sharpe (ann, net)  : {ev.sharpe_ann:.2f}  95% CI [{ev.sharpe_ann_ci_lo:.2f}, {ev.sharpe_ann_ci_hi:.2f}]",
+        f" P(Sharpe>0)        : {ev.psr_vs_zero:.3f}",
+        f" deflated Sharpe    : {ev.deflated_sharpe:.3f}  (n_trials={ev.n_trials}; edge iff >= 0.95)",
+        f" VERDICT            : {'EDGE (rare!)' if ev.significant else 'NO demonstrated edge'}",
+        "=" * 64,
+    ])
 
 
 def cmd_backtest(args: argparse.Namespace) -> int:
@@ -88,6 +113,9 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     result = bt.run(symbols, args.start, args.end, args.interval)
     report = build_report(result)
     print(report.render())
+
+    if not args.no_eval:
+        print(_render_eval(result, n_trials=len(strategies)))
 
     if args.store:
         store = ParquetStore()
@@ -117,17 +145,21 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--symbols", nargs="*", default=None, help="default: SPX SPY QQQ")
     bt.add_argument("--interval", default="1m")
     bt.add_argument(
-        "--provider", choices=["synthetic", "ibkr-store", "theta-store"], default="synthetic",
+        "--provider", choices=["synthetic", "ibkr-store", "yahoo-store", "theta-store"],
+        default="synthetic",
         help="data source: 'synthetic' (default, deterministic fixture) or replay "
-             "REAL data ingested into the store ('ibkr-store' underlying, "
-             "'theta-store' options). Real-data runs need prior ingestion "
-             "(docs/REAL_DATA.md). Use --symbols SPY QQQ for an ibkr-store run.",
+             "REAL data ingested into the store ('ibkr-store'/'yahoo-store' "
+             "underlying, 'theta-store' options). Real-data runs need prior ingestion "
+             "(docs/REAL_DATA.md).",
     )
     bt.add_argument("--store-root", dest="store_root", default="data_store",
                     help="parquet store root for --provider *-store (default: data_store)")
+    bt.add_argument("--no-eval", dest="no_eval", action="store_true",
+                    help="skip the honesty scorecard (clustered-t / bootstrap-CI Sharpe / deflated Sharpe)")
     bt.add_argument(
-        "--strategy", nargs="+", default=["s3"], choices=["s1", "s2", "s3"],
-        help="strategies to run (default s3, the control). s1/s2 load option features (slower).",
+        "--strategy", nargs="+", default=["s3"], choices=["s1", "s2", "s3", "s4", "s5"],
+        help="strategies (default s3). s1/s2 load option features (slower); "
+             "s3=VWAP reversion, s4=ORB breakout, s5=VWAP momentum (underlying-only).",
     )
     bt.add_argument("--nav", type=float, default=None, help="paper NAV (assumption)")
     bt.add_argument("--entry-z", dest="entry_z", type=float, default=2.0)

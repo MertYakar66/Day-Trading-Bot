@@ -90,6 +90,7 @@ class DataSource(Enum):
     SYNTHETIC = "synthetic"
     THETA = "theta"
     IBKR = "ibkr"
+    YAHOO = "yahoo"
     PARITY = "parity"
     FREE_DAILY = "free_daily"
     FUSED = "fused"
@@ -103,6 +104,7 @@ class DataSource(Enum):
         """True for sources backed by real market data (never SYNTHETIC)."""
         return self in (
             DataSource.IBKR,
+            DataSource.YAHOO,
             DataSource.THETA,
             DataSource.PARITY,
             DataSource.FREE_DAILY,
