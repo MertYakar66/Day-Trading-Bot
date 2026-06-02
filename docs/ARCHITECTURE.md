@@ -21,12 +21,17 @@ intraday/
   logging_config.py    # structured logging
   _vendor.py           # puts vendor/swe on sys.path (no SWE import, no network)
 
-  data/                # T0.1/T0.2 — the data layer
+  data/                # T0.1/T0.2 + real-data path — the data layer
     provider.py        #   DataProvider ABC + asset-kind registry + exceptions
-    synthetic.py       #   SyntheticDataProvider (deterministic; THE workhorse)
-    theta_adapter.py   #   ThetaDataProvider (real path; never connects this session)
+    synthetic.py       #   SyntheticDataProvider (deterministic; the test fixture)
+    ibkr.py            #   IBKRDataProvider — REAL underlying bars (reads only) + grid remap
+    parity.py          #   ParityUnderlyingProvider — underlying via put-call parity (deep hist)
+    store_provider.py  #   StoreBackedProvider — offline replay of captured data (CI-safe)
+    fused.py           #   FusedDataProvider — underlying fallbacks + Theta options
+    theta_adapter.py   #   ThetaDataProvider (OPTIONS-only; disconnected this session)
     store.py           #   ParquetStore (ticker=/date= layout, DESIGN §2.3)
     quality.py         #   liquidity / staleness predicates
+    # corrected data tiers + how-to: docs/REAL_DATA.md, docs/OPERATOR_RUNBOOK.md
 
   features/            # T0.3 — causal, PIT-sampled feature builders
     base.py            #   FeatureRow + latest_value PIT sampler

@@ -18,7 +18,9 @@ import pandas as pd
 
 from .backtest.engine import IntradayBacktester
 from .config import DEFAULT_SYMBOLS, EngineConfig
+from .contracts import DataSource
 from .data.store import ParquetStore
+from .data.store_provider import StoreBackedProvider
 from .data.synthetic import SyntheticDataProvider
 from .logging_config import get_logger
 from .metrics import build_report
@@ -27,6 +29,28 @@ from .signals.s2_zerodte_vrp import S2ZeroDteVrp
 from .signals.s3_vwap_orb import S3VwapOrb
 
 logger = get_logger("intraday.cli")
+
+# CLI provider name → the DataSource its store partitions were written with.
+_STORE_SOURCES: dict[str, DataSource] = {
+    "ibkr-store": DataSource.IBKR,
+    "theta-store": DataSource.THETA,
+}
+
+
+def _build_provider(args, cfg: EngineConfig, symbols: list[str]):
+    """Construct the data provider for the run.
+
+    ``synthetic`` (default) is the deterministic fixture; ``ibkr-store`` /
+    ``theta-store`` replay REAL data previously ingested into the parquet store
+    (network-free, reproducible). Real-data runs require the data to be ingested
+    first — see docs/REAL_DATA.md / docs/OPERATOR_RUNBOOK.md.
+    """
+    if args.provider == "synthetic":
+        return SyntheticDataProvider(cfg.data, cfg.session)
+    source = _STORE_SOURCES[args.provider]
+    return StoreBackedProvider(
+        ParquetStore(args.store_root), source, symbols=symbols, interval=args.interval
+    )
 
 
 def _build_strategies(names: list[str], edge: float, entry_z: float, stop_k: float):
@@ -52,13 +76,13 @@ def _build_config(nav: float | None) -> EngineConfig:
 
 def cmd_backtest(args: argparse.Namespace) -> int:
     cfg = _build_config(args.nav)
-    provider = SyntheticDataProvider(cfg.data, cfg.session)
+    symbols = args.symbols or list(DEFAULT_SYMBOLS)
+    provider = _build_provider(args, cfg, symbols)
     strategies = _build_strategies(args.strategy, args.edge, args.entry_z, args.stop_k)
     bt = IntradayBacktester(cfg, provider, strategies)
 
-    symbols = args.symbols or list(DEFAULT_SYMBOLS)
     logger.info(
-        "Phase-0 backtest | source=%s symbols=%s %s..%s interval=%s nav=$%.0f",
+        "backtest | source=%s symbols=%s %s..%s interval=%s nav=$%.0f",
         provider.source.value, symbols, args.start, args.end, args.interval, cfg.risk.paper_nav,
     )
     result = bt.run(symbols, args.start, args.end, args.interval)
@@ -92,6 +116,15 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--end", type=date.fromisoformat, default=date(2026, 5, 29))
     bt.add_argument("--symbols", nargs="*", default=None, help="default: SPX SPY QQQ")
     bt.add_argument("--interval", default="1m")
+    bt.add_argument(
+        "--provider", choices=["synthetic", "ibkr-store", "theta-store"], default="synthetic",
+        help="data source: 'synthetic' (default, deterministic fixture) or replay "
+             "REAL data ingested into the store ('ibkr-store' underlying, "
+             "'theta-store' options). Real-data runs need prior ingestion "
+             "(docs/REAL_DATA.md). Use --symbols SPY QQQ for an ibkr-store run.",
+    )
+    bt.add_argument("--store-root", dest="store_root", default="data_store",
+                    help="parquet store root for --provider *-store (default: data_store)")
     bt.add_argument(
         "--strategy", nargs="+", default=["s3"], choices=["s1", "s2", "s3"],
         help="strategies to run (default s3, the control). s1/s2 load option features (slower).",

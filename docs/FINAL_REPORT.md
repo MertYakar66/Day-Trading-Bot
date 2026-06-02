@@ -1,8 +1,52 @@
-# Final Report — Intraday Engine (Phase 0 + Phase 1)
+# Final Report — Intraday Engine (Phase 0 + Phase 1 + Real-Data Path)
 
-**Date:** 2026-06-02 · **Status:** Phase 0 and Phase 1 complete, merged to `main`,
-CI green, 263 tests passing · **Data source: SYNTHETIC (deterministic). Not a real
-edge.**
+**Date:** 2026-06-02 · **Status:** Phase 0 + Phase 1 complete; the real-data path is
+now wired and run on a first REAL sample. 312 tests passing. · **Data: SYNTHETIC
+validates the harness; a first REAL-data S3 backtest (IBKR underlying) was net-
+positive on a tiny window but is STATISTICALLY INSIGNIFICANT — NOT a demonstrated
+edge.** See §0.
+
+## 0. Real-data validation (2026-06-02) — the first honest real-data run
+
+The corrected data-tier reality was wired (options=Theta STANDARD;
+underlying=IBKR/parity — Theta never serves the underlying; see
+[`REAL_DATA.md`](REAL_DATA.md)) and the **first backtest on REAL intraday data** was
+run. Theta was **not touched** (operator uses it concurrently); the underlying came
+from **IBKR** (reads only).
+
+**Data reality:** IBKR's data endpoint caps at **1000 bars/request, back-from-now**.
+The practical maximum real 5-min history is ~**13 recent sessions** — deep
+2022→today intraday genuinely needs the Theta options pull + put-call parity
+(operator backfill, [`OPERATOR_RUNBOOK.md`](OPERATOR_RUNBOOK.md)). So this run is a
+**small-sample plumbing validation**, by necessity.
+
+**S3 (VWAP-reversion control) on 12 real SPY+QQQ 5-min sessions (2026-05-14..06-01),
+net of costs:**
+
+| metric | value |
+|---|---|
+| trades | 65 |
+| NET PnL | **+$306.88 (+0.31% of $100k)** |
+| net Sharpe / Sortino | 2.84 / 7.66 |
+| win rate / payoff | 46.2% / 1.48 |
+| cost | $376.88 (2.95 bps of notional — same model as synthetic) |
+| **daily-PnL t-stat (n=12)** | **0.80 — NOT significant** |
+
+**Verdict (honest): no edge is claimed.** The result is net-positive after costs and
+internally consistent (balanced across SPY/QQQ and across both halves; the no-edge
+control `edge=0.0` correctly produces **0 trades** — the gate refuses everything
+absent an edge assumption). But **t = 0.80 over 12 sessions cannot reject "no
+edge"** — it is equally consistent with a genuine short-horizon mean-reversion
+tendency and with noise, and the best single day is ~60% of the total. A credible
+go/no-go requires a powered, out-of-sample test on the deep-history backfill.
+
+**S1 / S2:** require real **option** data → blocked on the operator's scoped Theta
+pull. The path is built and proven by tests; not run this session.
+
+**What this validates (proven):** the real-data plumbing end-to-end — IBKR
+start→close grid remap (feed-gap-clean, coverage-honest), provenance enforcement
+(no relabeling), the SAME cost model on real data (2.95 bps), and no-look-ahead on
+remapped real bars. It says nothing about edge.
 
 ## 1. What was delivered
 
@@ -78,9 +122,10 @@ minors (gate EV is a pre-fill estimate; kill-switch is realized-PnL based).
 
 ## 5. What a human must decide next
 
-1. **Theta tier** — upgrade to STANDARD to unlock real intraday data (the
-   `ThetaDataProvider` is a drop-in once unlocked), or stay synthetic for harness
-   development.
+1. **Theta options backfill** — run the scoped Theta-STANDARD OPTIONS pull
+   ([`OPERATOR_RUNBOOK.md`](OPERATOR_RUNBOOK.md)) to unlock S1/S2 and the
+   parity-reconstructed deep-history underlying. (Theta serves OPTIONS only —
+   underlying is IBKR/parity; the providers are built and tested.)
 2. **Paper NAV & PDT** — the account size paper results should model (drives
    sizing and which structures are affordable — see the SPX-S2 constraint).
 3. **Acceptance thresholds** (DESIGN §8) — Sharpe/expectancy/DD bars, calibrated on

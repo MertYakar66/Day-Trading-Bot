@@ -6,6 +6,92 @@
 
 ---
 
+## Session 2026-06-02 — Real-data integration (feat/real-data-path)
+
+First honest backtest on REAL intraday data, and the corrected real-data wiring.
+Paper-only. Theta NOT touched this session (operator uses it concurrently).
+
+### Real-data tier correction (the central audit)
+
+The prior real-Theta adapter assumed Theta served intraday stock/index. **It does
+not** at the operator's tiers. Corrected reality (now encoded in code + docs):
+
+- **Theta OPTIONS = STANDARD** → intraday option tape + IV + 1st greeks (the only
+  real Theta data here). **Theta STOCK = FREE/EOD-only; Theta INDEX = no access.**
+- **Underlying** (SPY/QQQ stock; SPX/VIX index) comes from **IBKR** (recent/live,
+  reads only) or **put-call parity** (deep history); free-daily for context.
+
+`ThetaDataProvider.get_bars` now raises a *structural* `DataUnavailable` (wrong
+source), not a tier error; its option methods are the real STANDARD path but stay
+disconnected (guard → `NotImplementedError`; never opens a socket). Tests updated.
+
+### What shipped
+
+- `intraday/data/ibkr.py` — `IBKRDataProvider` over a read-only `IBKRClient`
+  protocol (operator wires `ib_insync`; dev uses the IBKR MCP) + pure
+  `payload_to_frame`/`bars_by_day` mappers + `ingest_payload`. Maps IBKR's
+  **START-labelled** bars onto the engine's canonical **CLOSE** grid, ffill +
+  coverage-counted, sparse/half-day sessions skipped. Contract registry resolved
+  via IBKR search (SPY 756733/ARCA, QQQ 320227571/NASDAQ, SPX 416904/CBOE,
+  VIX 13455763/CBOE). Underlying only — option methods raise.
+- `intraday/data/store_provider.py` — `StoreBackedProvider`: offline, network-free
+  replay from the parquet store; `trading_days` from partitions (multi-symbol
+  intersection); refuses to serve a frame under a source it wasn't written with.
+- `intraday/data/parity.py` — `ParityUnderlyingProvider` + parity math
+  (`F = K + e^{rT}(C−P)`, `S = F·e^{−(r−q)T}`); proven by tests (recover a known
+  spot path). The deep-history underlying path for when Theta options exist.
+- `intraday/data/fused.py` — `FusedDataProvider`: underlying fallbacks
+  (IBKR → parity → free-daily) + Theta options; each frame keeps its own source.
+- `DataSource` += IBKR/PARITY/FREE_DAILY/FUSED (+ `is_real`); `metrics.render`
+  prints `[REAL DATA: <src>]` vs the synthetic banner; CLI `--provider
+  {synthetic,ibkr-store,theta-store}` + `--store-root`.
+- `scripts/ingest_ibkr_underlying.py` (raw IBKR JSON → store) and
+  `scripts/pull_theta_options_scoped.py` (scoped Theta PLANNER, safety-gated, never
+  pulls here). Docs: `docs/REAL_DATA.md`, `docs/OPERATOR_RUNBOOK.md`.
+- Tests: +`test_data_ibkr`, `test_data_parity`, `test_data_store_provider`,
+  `test_data_fused`, `test_integration_real_data` (end-to-end real-path, PIT
+  invariant on remapped bars), rewrote `test_theta_adapter`, +`test_scripts_theta_plan`.
+  Full suite **312 passed**.
+
+### Data reality found: IBKR intraday history is shallow
+
+IBKR's data endpoint caps at **1000 bars/request, back-from-now** (no start date).
+`period=ONE_YEAR` for 5-min returned only ~1 week. Practical max real 5-min history
+= 1000 bars ≈ **~13 recent sessions**. Deep 2022→today intraday genuinely requires
+the Theta options pull + parity (operator backfill) — exactly as the brief
+anticipated. So this session's real test is necessarily **small-sample**.
+
+### Headline real-data result (S3 control — REAL, but UNDERPOWERED, not an edge)
+
+Ingested 12 real sessions (2026-05-14..06-01) of SPY+QQQ 5-min via IBKR. S3
+(VWAP-reversion, `edge=0.10`), net of costs:
+
+- **65 trades, NET +$306.88 (+0.31%)**, net Sharpe 2.84, win 46.2%, payoff 1.48,
+  profit factor 1.27, cost 2.95 bps of notional (same model as synthetic).
+- Controls: **`edge=0.0` → 0 trades** (the gate refuses everything with no edge
+  claim — positive PnL only appears once an edge is assumed that lets trades pass).
+  Balanced across symbols (SPY +$147 / QQQ +$160) and halves (+$154 / +$153).
+- **Statistical honesty: daily-PnL t-stat = 0.80 (n=12) — NOT significant.** Best
+  day +$182 is ~60% of the total. This is consistent with BOTH a real short-horizon
+  mean-reversion tendency AND with noise. **No edge is claimed.** A powered,
+  out-of-sample verdict needs the Theta+parity deep-history backfill.
+
+### Decisions + rationale
+
+- **Pull once → store → replay**: the bulky IBKR fetch (isolated to a background
+  agent / saved tool-result files to keep context lean) is separated from the
+  deterministic, network-free `StoreBackedProvider` replay the backtest runs on.
+- **Grid remap over the synthetic-style ffill**: IBKR start→close (+interval) then
+  reindex to `bar_close_index`; missing bars ffilled and **counted**; sessions
+  below `--min-coverage` (half-days/sparse) skipped, never padded with a fake
+  afternoon. Keeps the feed-gap guard and multi-symbol alignment intact.
+- **Provenance is enforced, not assumed** — `StoreBackedProvider` won't relabel.
+- **Theta stays untouched**: providers/scripts are delivered + proven by tests; the
+  live pull is the operator's gated step. S1/S2 (need real options) remain pending
+  that backfill — Phase 2 stays on hold per the brief.
+
+---
+
 ## Session 2026-06-02 — Phase 1 begins (build/phase-1)
 
 Phase 0 is green and merged to `main`, so Phase 1 started (DESIGN §5, behind the

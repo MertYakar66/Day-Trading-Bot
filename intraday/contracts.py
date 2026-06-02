@@ -71,14 +71,43 @@ class AssetKind(Enum):
 
 
 class DataSource(Enum):
-    """Provenance of a data frame. SYNTHETIC must never be mistaken for real."""
+    """Provenance of a data frame. SYNTHETIC must never be mistaken for real.
+
+    Real-data sources (the corrected data-tier reality — see PROGRESS.md):
+    - ``IBKR``       — underlying intraday bars + live snapshots (reads only):
+      SPY/QQQ stock, SPX/VIX index. The real underlying feed.
+    - ``THETA``      — OPTIONS ONLY at the operator's STANDARD tier (intraday tape
+      + IV + greeks). Theta stock is FREE/EOD-only and Theta index is unavailable,
+      so Theta NEVER supplies the underlying here.
+    - ``PARITY``     — underlying reconstructed from synchronized ATM call/put
+      option quotes via put-call parity (deep history where IBKR is shallow).
+    - ``FREE_DAILY`` — free end-of-day underlying (yfinance/Stooq) for daily
+      regime/tail context only (no intraday).
+    - ``FUSED``      — a composite provider resolving underlying across the above
+      and options from Theta (per-frame provenance is preserved on each frame).
+    """
 
     SYNTHETIC = "synthetic"
     THETA = "theta"
+    IBKR = "ibkr"
+    PARITY = "parity"
+    FREE_DAILY = "free_daily"
+    FUSED = "fused"
 
     @property
     def is_synthetic(self) -> bool:
         return self is DataSource.SYNTHETIC
+
+    @property
+    def is_real(self) -> bool:
+        """True for sources backed by real market data (never SYNTHETIC)."""
+        return self in (
+            DataSource.IBKR,
+            DataSource.THETA,
+            DataSource.PARITY,
+            DataSource.FREE_DAILY,
+            DataSource.FUSED,
+        )
 
 
 class GammaRegime(Enum):

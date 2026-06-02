@@ -1,8 +1,17 @@
-"""Tests for the read-only Theta data adapter.
+"""Tests for the read-only Theta data adapter — OPTIONS ONLY, disconnected.
 
-These tests verify the disconnected-by-policy behavior of ``ThetaDataProvider``:
-it is fully importable and exercisable WITHOUT ever opening a socket. We never
-assert a successful data fetch (no Theta this session).
+Verifies the corrected data-tier behavior of ``ThetaDataProvider`` (see
+PROGRESS.md "Real-data tier correction"):
+
+- Theta is an OPTIONS-ONLY source here; it NEVER serves the underlying. So
+  ``get_bars`` raises a *structural* ``DataUnavailable`` (wrong source) at any
+  ``allow_connect`` setting — the underlying comes from IBKR / put-call parity.
+- The option methods are the real STANDARD path but are disconnected by policy
+  this session: ``get_option_chain`` / ``get_option_tape`` raise
+  ``ThetaNotConnectedThisSession`` unless ``allow_connect=True`` (then they raise
+  ``NotImplementedError`` — the live pull is an out-of-band operator step).
+
+No test asserts a successful data fetch, and none opens a socket.
 """
 
 from __future__ import annotations
@@ -12,7 +21,7 @@ from datetime import date
 import pytest
 
 from intraday.contracts import DataSource
-from intraday.data.provider import TierUnavailable
+from intraday.data.provider import DataUnavailable
 from intraday.data.theta_adapter import (
     ThetaDataProvider,
     ThetaNotConnectedThisSession,
@@ -27,8 +36,9 @@ def test_source_is_theta():
     assert ThetaDataProvider.source is DataSource.THETA
     provider = ThetaDataProvider()
     assert provider.source is DataSource.THETA
-    # THETA is the non-synthetic feed.
+    # THETA is a real (non-synthetic) feed.
     assert provider.source.is_synthetic is False
+    assert provider.source.is_real is True
 
 
 def test_default_allow_connect_is_false():
@@ -39,19 +49,26 @@ def test_default_allow_connect_is_false():
     assert provider._connector is None
 
 
-@pytest.mark.parametrize(
-    "method, args",
-    [
-        ("get_bars", (SYMBOL, DAY, "1m")),
-        ("get_option_chain", (SYMBOL, DAY)),
-        ("get_option_tape", (SYMBOL, DAY)),
-    ],
-)
-def test_methods_blocked_when_not_connected(method, args):
-    """With allow_connect=False, data methods raise ThetaNotConnectedThisSession."""
+@pytest.mark.parametrize("allow_connect", [False, True])
+def test_get_bars_is_structural_data_unavailable(allow_connect):
+    """Theta is options-only: get_bars ALWAYS raises DataUnavailable (wrong source),
+    independent of allow_connect — it is not a tier upsell. Never opens a socket."""
+    provider = ThetaDataProvider(allow_connect=allow_connect)
+    with pytest.raises(DataUnavailable) as exc:
+        provider.get_bars(SYMBOL, DAY, "1m")
+    msg = str(exc.value)
+    assert "OPTIONS-ONLY" in msg
+    assert "IBKR" in msg  # points at the correct underlying source
+    # Not the not-connected error — this is structural, not a policy block.
+    assert not isinstance(exc.value, ThetaNotConnectedThisSession)
+
+
+@pytest.mark.parametrize("method", ["get_option_chain", "get_option_tape"])
+def test_option_methods_blocked_when_not_connected(method):
+    """With allow_connect=False, option methods raise ThetaNotConnectedThisSession."""
     provider = ThetaDataProvider(allow_connect=False)
     with pytest.raises(ThetaNotConnectedThisSession):
-        getattr(provider, method)(*args)
+        getattr(provider, method)(SYMBOL, DAY)
 
 
 def test_not_connected_error_is_runtimeerror():
@@ -59,36 +76,18 @@ def test_not_connected_error_is_runtimeerror():
     assert issubclass(ThetaNotConnectedThisSession, RuntimeError)
     provider = ThetaDataProvider()
     with pytest.raises(RuntimeError):
-        provider.get_bars(SYMBOL, DAY, "1m")
+        provider.get_option_tape(SYMBOL, DAY)
 
 
-@pytest.mark.parametrize(
-    "method, args",
-    [
-        ("get_bars", (SYMBOL, DAY, "1m")),
-        ("get_option_chain", (SYMBOL, DAY)),
-        ("get_option_tape", (SYMBOL, DAY)),
-    ],
-)
-def test_methods_raise_tier_unavailable_when_allowed(method, args):
-    """With allow_connect=True the guard passes but FREE tier gates intraday data.
-
-    This still never opens a socket: TierUnavailable is raised before any
-    connector I/O for these intraday/option methods.
-    """
+@pytest.mark.parametrize("method", ["get_option_chain", "get_option_tape"])
+def test_option_methods_not_wired_when_allowed(method):
+    """With allow_connect=True the guard passes but the live pull is intentionally
+    NOT wired in-engine (out-of-band operator step) → NotImplementedError. Still no
+    socket: the error is raised before any connector I/O."""
     provider = ThetaDataProvider(allow_connect=True)
-    with pytest.raises(TierUnavailable):
-        getattr(provider, method)(*args)
-
-
-def test_tier_unavailable_message_is_informative():
-    """The TierUnavailable error documents which tier/method is required."""
-    provider = ThetaDataProvider(allow_connect=True)
-    with pytest.raises(TierUnavailable) as exc:
-        provider.get_bars(SYMBOL, DAY, "1m")
-    msg = str(exc.value)
-    assert "STANDARD" in msg
-    assert SYMBOL in msg
+    with pytest.raises(NotImplementedError) as exc:
+        getattr(provider, method)(SYMBOL, DAY)
+    assert "OPERATOR_RUNBOOK" in str(exc.value)
 
 
 def test_trading_days_calendar_only_nonempty():

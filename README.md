@@ -15,25 +15,35 @@ minutes-to-hours intraday decisions.
   source, results, open items.
 - **Final report:** [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) — results net of
   costs, proven vs assumed, and what a human must decide next.
+- **Real-data path:** [`docs/REAL_DATA.md`](docs/REAL_DATA.md) +
+  [`docs/OPERATOR_RUNBOOK.md`](docs/OPERATOR_RUNBOOK.md) — the corrected data-tier
+  wiring (IBKR/parity underlying, Theta OPTIONS) and the scoped operator Theta pull.
 
 ## Quickstart
 
 ```bash
 python -m venv .venv && .venv/Scripts/activate          # Windows; use bin/activate on POSIX
 pip install -r requirements.txt
-pytest                                                   # full suite (network-free, synthetic)
-python -m intraday backtest --start 2026-05-01 --end 2026-05-29              # S3 control, NET report
-python -m intraday backtest --symbols SPY --strategy s1 --start 2026-05-04 --end 2026-05-08  # S1
-python -m intraday backtest --symbols SPY --strategy s2 --start 2026-05-04 --end 2026-05-08  # S2
+pytest                                                   # full suite (network-free)
+python -m intraday backtest --start 2026-05-01 --end 2026-05-29              # S3 control, SYNTHETIC
+python -m intraday backtest --symbols SPY --strategy s1 --start 2026-05-04 --end 2026-05-08  # S1 (synthetic)
+python -m intraday backtest --symbols SPY --strategy s2 --start 2026-05-04 --end 2026-05-08  # S2 (synthetic)
+
+# Real data (after ingesting IBKR underlying — see docs/REAL_DATA.md):
+python -m scripts.ingest_ibkr_underlying --raw-dir data_raw/ibkr --store-root data_store
+python -m intraday backtest --provider ibkr-store --symbols SPY QQQ --interval 5m \
+    --strategy s3 --start <first-session> --end <last-session>               # S3 on REAL IBKR data
 ```
 
-> **Status:** Phase 0 + Phase 1 complete and green on `main` (263 tests). The
-> gamma spine — S1 (gamma-regime), S2 (0DTE VRP, **defined-risk only**), S3
-> (VWAP control) — all run behind the one net-of-cost expectancy gate, plus a
-> paper ledger. **All data is SYNTHETIC** (deterministic) — the Theta tier is FREE
-> (no real intraday data) and Theta is not touched during build sessions; see
-> [`docs/THETA_TIER_PROBE.md`](docs/THETA_TIER_PROBE.md). Synthetic results are a
-> harness validation, **not an edge**.
+> **Status:** Phase 0 + Phase 1 complete and green (**312 tests**), plus a wired
+> **real-data path**. The gamma spine — S1 (gamma-regime), S2 (0DTE VRP,
+> **defined-risk only**), S3 (VWAP control) — runs behind the one net-of-cost
+> expectancy gate, plus a paper ledger. **Corrected data tiers:** options come from
+> **Theta STANDARD**; the **underlying** comes from **IBKR** (intraday, reads only)
+> or **put-call parity** (deep history) — never Theta. A first REAL-data S3 run on
+> ~13 IBKR sessions was net-positive after costs but **statistically insignificant
+> (not an edge)**. Theta is not touched in build sessions. See
+> [`docs/REAL_DATA.md`](docs/REAL_DATA.md), [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) §0.
 
 ## Dependencies
 
@@ -57,11 +67,19 @@ Recommended options, easiest first:
 
 ## Environment
 
-Live data requires **Theta Terminal running on the laptop** (`127.0.0.1:25503`).
-A cloud sandbox has no Terminal and no data-science deps, so all real data
-pulls, streaming, and backtests run laptop-side. Before any data work, confirm
-the subscription tier by running `scripts/probe_theta_capabilities.py` **in the
-smart-wheel-engine checkout** (that script ships with SWE).
+Real data (corrected tiers — see [`docs/REAL_DATA.md`](docs/REAL_DATA.md)):
+
+- **Underlying** (SPY/QQQ stock; SPX/VIX index) → **IBKR** intraday bars/snapshots,
+  **reads only** (operator: `ib_insync`/IB Gateway; dev: the IBKR MCP). For deep
+  history, **put-call parity** from ATM option quotes. Never any order/account call.
+- **Options** (tape/IV/greeks) → **Theta STANDARD**, via the scoped operator pull
+  ([`docs/OPERATOR_RUNBOOK.md`](docs/OPERATOR_RUNBOOK.md)); the Terminal runs
+  laptop-side at `127.0.0.1:25503`. Theta STOCK is FREE/EOD-only and Theta INDEX is
+  unavailable, so **Theta never serves the underlying**.
+
+Backtests replay captured data from the parquet store (`--provider ibkr-store` /
+`theta-store`) — network-free. Theta is **not touched** during build sessions (the
+operator uses the subscription concurrently).
 
 ## Operating rules (hard guardrails)
 
