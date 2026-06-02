@@ -29,7 +29,7 @@ from __future__ import annotations
 import math
 
 from ..config import EngineConfig
-from ..contracts import GateResult, SignalProposal, Verdict
+from ..contracts import CostBreakdown, GateResult, SignalProposal, Verdict
 from ..costs import round_trip_cost
 
 
@@ -41,21 +41,37 @@ class ExpectancyGate:
 
     def evaluate(self, proposal: SignalProposal, size: int) -> GateResult:
         threshold = self.config.gate.ev_threshold
-        multiplier = proposal.instrument.multiplier
         p = proposal.win_prob
 
-        win = proposal.reward_per_unit * size * multiplier
-        loss = proposal.risk_per_unit * size * multiplier
+        # Per-unit gross dollars work for both directional trades (reward/risk ×
+        # multiplier) and defined-risk structures (explicit credit / max loss).
+        win = proposal.reward_dollars * size
+        loss = proposal.risk_dollars * size
 
-        cost = round_trip_cost(
-            side=proposal.side,
-            instrument=proposal.instrument,
-            ref_price=proposal.ref_price,
-            spread=proposal.spread,
-            size=size,
-            adv=proposal.adv,
-            config=self.config.cost,
-        )
+        # Structures supply their own per-unit (multi-leg) round-trip cost so it is
+        # never understated by the single-instrument model. It is given for one
+        # unit and scaled linearly here (exact for spread+commission; conservative
+        # for sqrt-impact, which is sublinear — we never understate).
+        if proposal.cost_override is not None:
+            co = proposal.cost_override
+            cost = CostBreakdown(
+                entry_slippage=co.entry_slippage * size,
+                exit_slippage=co.exit_slippage * size,
+                commission=co.commission * size,
+                impact=co.impact * size,
+                total=co.total * size,
+                detail=co.detail,
+            )
+        else:
+            cost = round_trip_cost(
+                side=proposal.side,
+                instrument=proposal.instrument,
+                ref_price=proposal.ref_price,
+                spread=proposal.spread,
+                size=size,
+                adv=proposal.adv,
+                config=self.config.cost,
+            )
 
         # Invalid probability is treated as un-evaluable (mirror R1a non-finite).
         if not (math.isfinite(p) and 0.0 <= p <= 1.0):

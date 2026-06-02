@@ -36,7 +36,33 @@ same gate). All still SYNTHETIC, paper-only.
 - Tests: `tests/test_s1.py` (geometry, both modes, stand-aside, fair-baseline) +
   `tests/test_phase1.py` (end-to-end gated). Suite: 248 tests.
 
-### Next (Phase 1): T1.2 S2 0DTE VRP (defined-risk only), T1.3 paper ledger.
+### T1.2 S2 0DTE VRP — defined-risk (shipped)
+
+- `intraday/signals/s2_zerodte_vrp.py` — a **defined-risk short iron condor** sold
+  when VRP is rich (IV > realized) AND net GEX is positive (vol-suppressing). The
+  structure is priced from the chain's ATM IV via SWE BSM (credit + capped max
+  loss); **no naked short gamma** (wings cap the loss); event days vetoed by the
+  event-lockout reviewer.
+- **Honest win_prob** (same discipline): `p_fair = max_loss/(credit+max_loss)`
+  (gross EV exactly 0 under fair pricing) **plus** the genuine VRP edge (realized
+  vs implied P(inside short strikes)). At zero VRP the gate refuses it.
+- **Costs not understated**: an explicit 4-leg round-trip `cost_override` (≈$13.75
+  per SPY spread). Generalized `SignalProposal`/gate/sizing to carry direct
+  credit/max-loss economics (backward-compatible — directional S1/S3 unchanged).
+- **Engine**: structured positions settle binary at the 0DTE close (keep credit
+  inside short strikes, else the capped max loss — conservatively overstating loss
+  in the short-to-long zone). One condor per symbol/day (held to close).
+- **Honest retail constraint surfaced**: a wide SPX condor's max loss exceeds the
+  1% per-trade risk budget on a $100k account → S2 correctly places NO SPX trade
+  (DESIGN §1 "retail constraints are real"). Demonstrated on SPY: 5-7 defined-risk
+  trades/2wk; net negative on random-walk synthetic (the synthetic VRP signal does
+  not predict the path's realized vol → thesis falsified, like S1/S3 — honest).
+- **Synthetic realism**: ATM IV anchored to the realized-vol scale with a vol-risk
+  premium COUPLED to the gamma skew (positive gamma ⇒ rich VRP — a real market
+  linkage), so S2's entry condition can actually occur. Set independently of PnL.
+- Tests: `tests/test_s2.py` + S2 cases in `tests/test_phase1.py`. Suite: 260.
+
+### Next (Phase 1): T1.3 paper ledger (live-shape record parity).
 
 ---
 

@@ -22,9 +22,25 @@ from .data.store import ParquetStore
 from .data.synthetic import SyntheticDataProvider
 from .logging_config import get_logger
 from .metrics import build_report
+from .signals.s1_gamma_regime import S1GammaRegime
+from .signals.s2_zerodte_vrp import S2ZeroDteVrp
 from .signals.s3_vwap_orb import S3VwapOrb
 
 logger = get_logger("intraday.cli")
+
+
+def _build_strategies(names: list[str], edge: float, entry_z: float, stop_k: float):
+    built = []
+    for n in names:
+        if n == "s1":
+            built.append(S1GammaRegime(edge=edge))
+        elif n == "s2":
+            built.append(S2ZeroDteVrp())
+        elif n == "s3":
+            built.append(S3VwapOrb(entry_z=entry_z, stop_k=stop_k, edge=edge))
+        else:
+            raise SystemExit(f"unknown strategy {n!r} (choose from s1/s2/s3)")
+    return built
 
 
 def _build_config(nav: float | None) -> EngineConfig:
@@ -37,7 +53,7 @@ def _build_config(nav: float | None) -> EngineConfig:
 def cmd_backtest(args: argparse.Namespace) -> int:
     cfg = _build_config(args.nav)
     provider = SyntheticDataProvider(cfg.data, cfg.session)
-    strategies = [S3VwapOrb(entry_z=args.entry_z, stop_k=args.stop_k, edge=args.edge)]
+    strategies = _build_strategies(args.strategy, args.edge, args.entry_z, args.stop_k)
     bt = IntradayBacktester(cfg, provider, strategies)
 
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
@@ -76,6 +92,10 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--end", type=date.fromisoformat, default=date(2026, 5, 29))
     bt.add_argument("--symbols", nargs="*", default=None, help="default: SPX SPY QQQ")
     bt.add_argument("--interval", default="1m")
+    bt.add_argument(
+        "--strategy", nargs="+", default=["s3"], choices=["s1", "s2", "s3"],
+        help="strategies to run (default s3, the control). s1/s2 load option features (slower).",
+    )
     bt.add_argument("--nav", type=float, default=None, help="paper NAV (assumption)")
     bt.add_argument("--entry-z", dest="entry_z", type=float, default=2.0)
     bt.add_argument("--stop-k", dest="stop_k", type=float, default=1.0)
