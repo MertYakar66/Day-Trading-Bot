@@ -185,6 +185,16 @@ def test_report_no_data_does_not_write_html(tmp_path, capsys):
     assert not out.exists()  # never write a dashboard whose verdict would misread as 'no edge'
 
 
+def test_compare_no_data_does_not_write_html(tmp_path, capsys):
+    # compare runs N strategies; the guard checks the shared n_days once after the loop.
+    out = tmp_path / "cmp.html"
+    rc = main(["compare", "--start", "2026-05-29", "--end", "2026-05-01",
+               "--out", str(out)])
+    assert rc == 2
+    assert "no trading days" in capsys.readouterr().err.lower()
+    assert not out.exists()
+
+
 # --------------------------------------------------------------------------- #
 # Duplicate --strategy keys must not inflate the trial count
 # --------------------------------------------------------------------------- #

@@ -93,9 +93,10 @@ def _render_eval(result, *, n_trials: int) -> str:
 
 
 def _dedup_strategies(names: list[str]) -> list[str]:
-    """Drop duplicate --strategy keys, preserving first-seen order. Without this,
-    ``--strategy s3 s3`` would run s3 twice and inflate the deflated-Sharpe trial
-    count (n_trials) behind the verdict with a phantom extra trial."""
+    """Drop duplicate --strategy keys, preserving first-seen order. A repeated key is
+    not an independent trial, so the honest deflated-Sharpe ``n_trials`` is the count
+    of DISTINCT strategies; deduping keeps that count (and the per-strategy run)
+    correct rather than letting ``--strategy s3 s3`` register s3 as two trials."""
     return list(dict.fromkeys(names))
 
 
