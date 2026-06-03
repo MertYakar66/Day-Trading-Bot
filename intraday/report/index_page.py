@@ -44,7 +44,12 @@ class _TitleParser(HTMLParser):
 
 
 def _extract_title(html: str, fallback: str) -> str:
-    """Pull the document <title> as plain text; fall back to ``fallback`` if absent."""
+    """Pull the document <title> as plain text; fall back to ``fallback`` if absent.
+
+    Handles attributes, entity decoding, and a missing close tag. (A *pathological*
+    nested ``<title>`` is interpreter-dependent — ``<title>`` is an RCDATA element on
+    some Python versions — but the title is always HTML-escaped on render, so any
+    residue is inert.)"""
     p = _TitleParser()
     try:
         p.feed(html)
