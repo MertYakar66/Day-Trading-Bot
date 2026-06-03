@@ -70,11 +70,21 @@ def _f(x: float) -> str:
     return f"{r:.2f}"
 
 
-def _empty(width: int, height: int, msg: str = "no data") -> str:
+def _a11y(title: str | None) -> tuple[str, str]:
+    """(svg-attr, first-child) for an accessible name: an ``aria-label`` on the
+    ``role="img"`` element plus a ``<title>`` child (what a screen reader announces).
+    Both are escaped; an absent title yields no attributes so behaviour is unchanged."""
+    if not title:
+        return "", ""
+    return f' aria-label="{escape(title)}"', f"<title>{escape(title)}</title>"
+
+
+def _empty(width: int, height: int, msg: str = "no data", *, title: str | None = None) -> str:
+    attr, title_el = _a11y(title or msg)
     return (
         f'<svg viewBox="0 0 {width} {height}" width="100%" '
-        f'preserveAspectRatio="xMidYMid meet" role="img" '
-        f'xmlns="http://www.w3.org/2000/svg" class="chart chart--empty">'
+        f'preserveAspectRatio="xMidYMid meet" role="img"{attr} '
+        f'xmlns="http://www.w3.org/2000/svg" class="chart chart--empty">{title_el}'
         f'<rect width="{width}" height="{height}" fill="none"/>'
         f'<text x="{width / 2:.0f}" y="{height / 2:.0f}" fill="{MUTED}" '
         f'font-size="13" text-anchor="middle" dominant-baseline="middle">'
@@ -82,11 +92,12 @@ def _empty(width: int, height: int, msg: str = "no data") -> str:
     )
 
 
-def _open(width: int, height: int, cls: str) -> str:
+def _open(width: int, height: int, cls: str, title: str | None = None) -> str:
+    attr, title_el = _a11y(title)
     return (
         f'<svg viewBox="0 0 {width} {height}" width="100%" '
-        f'preserveAspectRatio="xMidYMid meet" role="img" '
-        f'xmlns="http://www.w3.org/2000/svg" class="chart {cls}">'
+        f'preserveAspectRatio="xMidYMid meet" role="img"{attr} '
+        f'xmlns="http://www.w3.org/2000/svg" class="chart {cls}">{title_el}'
     )
 
 
@@ -142,12 +153,14 @@ def line_chart(
     color: str = ACCENT,
     labels: Sequence[str] | None = None,
     value_fmt=lambda v: f"{v:,.0f}",
+    title: str | None = None,
 ) -> str:
     """A filled line chart. ``baseline`` (e.g. starting capital) draws a dashed
-    reference line and tints the area above/below it."""
+    reference line and tints the area above/below it. ``title`` sets the chart's
+    accessible name (SVG ``<title>`` + ``aria-label``)."""
     vals = _finite(values)
     if len(vals) < 2:
-        return _empty(width, height)
+        return _empty(width, height, title=title)
 
     pad_l, pad_r, pad_t, pad_b = 8, 52, 12, 22
     x0, x1 = pad_l, width - pad_r
@@ -192,7 +205,7 @@ def line_chart(
     xlab = _x_labels(labels, len(vals), x0, x1, height - 6)
 
     return (
-        _open(width, height, "chart--line")
+        _open(width, height, "chart--line", title)
         + grid + area + base_line + line + xlab + "</svg>"
     )
 
@@ -209,14 +222,16 @@ def multi_line_chart(
     labels: Sequence[str] | None = None,
     colors: Sequence[str] = SERIES_PALETTE,
     value_fmt=lambda v: f"{v:,.2f}",
+    title: str | None = None,
 ) -> str:
     """Overlay several series on one set of axes (no fill, for clarity). Each series
     is drawn in ``colors[i]``; the caller renders a matching legend. Series may have
-    different lengths — each is mapped across the full width by its own length."""
+    different lengths — each is mapped across the full width by its own length.
+    ``title`` sets the accessible name."""
     clean = [_finite(s) for s in series]
     drawable = [s for s in clean if len(s) >= 2]
     if not drawable:
-        return _empty(width, height)
+        return _empty(width, height, title=title)
 
     pad_l, pad_r, pad_t, pad_b = 8, 56, 12, 22
     x0, x1 = pad_l, width - pad_r
@@ -260,7 +275,7 @@ def multi_line_chart(
 
     xlab = _x_labels(labels, longest, x0, x1, height - 6)
     return (
-        _open(width, height, "chart--multiline")
+        _open(width, height, "chart--multiline", title)
         + grid + base_line + "".join(lines) + xlab + "</svg>"
     )
 
@@ -276,13 +291,15 @@ def area_chart(
     color: str = DOWN,
     labels: Sequence[str] | None = None,
     value_fmt=lambda v: f"{v:.1%}",
+    title: str | None = None,
 ) -> str:
     """Underwater curve: ``values`` are typically <= 0 (drawdown fractions) and the
     fill drops from the zero line. The scale is adaptive, so a stray positive value
-    is shown faithfully (above zero) rather than silently squashed into [-1, 0]."""
+    is shown faithfully (above zero) rather than silently squashed into [-1, 0].
+    ``title`` sets the accessible name."""
     vals = _finite(values)
     if len(vals) < 2:
-        return _empty(width, height)
+        return _empty(width, height, title=title)
 
     pad_l, pad_r, pad_t, pad_b = 8, 52, 12, 22
     x0, x1 = pad_l, width - pad_r
@@ -312,7 +329,7 @@ def area_chart(
     )
     grid = _y_gridlines(lo, hi, x0, x1, y_top, y_bot, value_fmt, n=3)
     xlab = _x_labels(labels, len(vals), x0, x1, height - 6)
-    return _open(width, height, "chart--area") + grid + zero + area + line + xlab + "</svg>"
+    return _open(width, height, "chart--area", title) + grid + zero + area + line + xlab + "</svg>"
 
 
 # --------------------------------------------------------------------------- #
@@ -325,11 +342,13 @@ def bar_chart(
     height: int = 200,
     labels: Sequence[str] | None = None,
     value_fmt=lambda v: f"{v:,.0f}",
+    title: str | None = None,
 ) -> str:
-    """Signed bars around a zero line; positive green, negative red."""
+    """Signed bars around a zero line; positive green, negative red. ``title`` sets
+    the accessible name."""
     vals = _finite(values)
     if not vals:
-        return _empty(width, height)
+        return _empty(width, height, title=title)
 
     pad_l, pad_r, pad_t, pad_b = 8, 52, 12, 22
     x0, x1 = pad_l, width - pad_r
@@ -364,7 +383,7 @@ def bar_chart(
     )
     grid = _y_gridlines(lo, hi, x0, x1, y_top, y_bot, value_fmt, n=4)
     xlab = _x_labels(labels, n, x0, x1, height - 6)
-    return _open(width, height, "chart--bars") + grid + "".join(bars) + zero + xlab + "</svg>"
+    return _open(width, height, "chart--bars", title) + grid + "".join(bars) + zero + xlab + "</svg>"
 
 
 # --------------------------------------------------------------------------- #
@@ -376,6 +395,7 @@ def waterfall(
     width: int = 480,
     height: int = 240,
     value_fmt=lambda v: f"${v:,.0f}",
+    title: str | None = None,
 ) -> str:
     """Cost-attribution waterfall.
 
@@ -386,7 +406,7 @@ def waterfall(
         waterfall([("gross", g, "total"), ("costs", -c, "delta"), ("net", n, "total")])
     """
     if not steps:
-        return _empty(width, height)
+        return _empty(width, height, title=title)
     # Non-finite deltas would poison the running total; treat them as 0.
     steps = [(label, (float(val) if _isfinite(val) else 0.0), kind) for label, val, kind in steps]
 
@@ -461,7 +481,7 @@ def waterfall(
         f'stroke="{AXIS}" stroke-width="1"/>'
     )
     parts.append(zero)
-    return _open(width, height, "chart--waterfall") + "".join(parts) + "</svg>"
+    return _open(width, height, "chart--waterfall", title) + "".join(parts) + "</svg>"
 
 
 # --------------------------------------------------------------------------- #
@@ -497,11 +517,13 @@ def heatmap(
     col_label_h: int = 26,
     value_fmt=lambda v: f"{v:.2f}",
     vmax: float | None = None,
+    title: str | None = None,
 ) -> str:
     """A labelled diverging heatmap. Colour is scaled by ``vmax`` (or the matrix's
-    max absolute value), centred at zero. Empty cells (``None``) render blank."""
+    max absolute value), centred at zero. Empty cells (``None``) render blank.
+    ``title`` sets the accessible name."""
     if not matrix or not matrix[0]:
-        return _empty(360, 120, "no matrix")
+        return _empty(360, 120, "no matrix", title=title)
 
     n_rows, n_cols = len(matrix), len(matrix[0])
     width = row_label_w + n_cols * cell + 8
@@ -515,7 +537,7 @@ def heatmap(
     scale = vmax if vmax is not None else (max(flat) if flat else 1.0)
     scale = scale or 1.0
 
-    parts: list[str] = [_open(width, height, "chart--heatmap")]
+    parts: list[str] = [_open(width, height, "chart--heatmap", title)]
     # column headers
     for j, c in enumerate(col_labels):
         x = row_label_w + j * cell + cell / 2
@@ -555,11 +577,12 @@ def heatmap(
 # Sparkline (tiny KPI-card trend)
 # --------------------------------------------------------------------------- #
 def sparkline(
-    values: Sequence[float], *, width: int = 120, height: int = 32, color: str = ACCENT
+    values: Sequence[float], *, width: int = 120, height: int = 32, color: str = ACCENT,
+    title: str | None = None,
 ) -> str:
     vals = _finite(values)
     if len(vals) < 2:
-        return _empty(width, height, "")
+        return _empty(width, height, "", title=title)
     lo, hi = min(vals), max(vals)
     if hi == lo:
         hi += 1.0
@@ -576,7 +599,7 @@ def sparkline(
     if color != ACCENT:
         stroke = color
     return (
-        _open(width, height, "chart--spark")
+        _open(width, height, "chart--spark", title)
         + f'<polyline points="{pts}" fill="none" stroke="{stroke}" stroke-width="1.5"/>'
         + "</svg>"
     )
