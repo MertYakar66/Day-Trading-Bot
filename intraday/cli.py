@@ -92,8 +92,40 @@ def _render_eval(result, *, n_trials: int) -> str:
     ])
 
 
+def _dedup_strategies(names: list[str]) -> list[str]:
+    """Drop duplicate --strategy keys, preserving first-seen order. Without this,
+    ``--strategy s3 s3`` would run s3 twice and inflate the deflated-Sharpe trial
+    count (n_trials) behind the verdict with a phantom extra trial."""
+    return list(dict.fromkeys(names))
+
+
+def _no_trading_days(result, provider_name: str, start, end) -> bool:
+    """When a run produced ZERO trading days, warn loudly on stderr and return True.
+
+    A zero-day run yields an all-zeros report whose honesty verdict would otherwise
+    read 'NO demonstrated edge' — but that is a NO-DATA condition (reversed dates, or
+    a ``*-store`` provider with nothing ingested), NOT the product's scientific
+    finding. Callers exit non-zero and suppress the verdict so the two can never be
+    confused — the verdict is the single thing this engine exists to state honestly."""
+    if result.n_days > 0:
+        return False
+    import sys
+
+    print(
+        f"WARNING: no trading days in [{start}..{end}] for provider='{provider_name}' "
+        "- nothing to evaluate.\n"
+        "  * check the date order (--start must be on or before --end);\n"
+        "  * for a *-store provider, ingest data first (see docs/REAL_DATA.md).\n"
+        "  This is a NO-DATA run, not a 'no demonstrated edge' result; the honesty "
+        "verdict is suppressed.",
+        file=sys.stderr,
+    )
+    return True
+
+
 def cmd_backtest(args: argparse.Namespace) -> int:
     cfg = _build_config(args.nav)
+    args.strategy = _dedup_strategies(args.strategy)
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
     provider = _build_provider(args, cfg, symbols)
     strategies = _build_strategies(args.strategy, args.edge, args.entry_z, args.stop_k)
@@ -106,6 +138,9 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     result = bt.run(symbols, args.start, args.end, args.interval)
     report = build_report(result)
     print(report.render())
+
+    if _no_trading_days(result, args.provider, args.start, args.end):
+        return 2  # no data: report shows zeros, but suppress the (meaningless) verdict
 
     if not args.no_eval:
         print(_render_eval(result, n_trials=len(strategies)))
@@ -147,6 +182,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     from .report import build_dashboard, build_summary
 
     cfg = _build_config(args.nav)
+    args.strategy = _dedup_strategies(args.strategy)
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
     provider = _build_provider(args, cfg, symbols)
     strategies = _build_strategies(args.strategy, args.edge, args.entry_z, args.stop_k)
@@ -157,6 +193,9 @@ def cmd_report(args: argparse.Namespace) -> int:
         provider.source.value, symbols, args.start, args.end, args.interval,
     )
     result = bt.run(symbols, args.start, args.end, args.interval)
+
+    if _no_trading_days(result, args.provider, args.start, args.end):
+        return 2  # refuse to write a dashboard whose verdict would misread as 'no edge'
 
     universe = None
     if args.universe_json:
@@ -189,6 +228,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
     from .report import build_comparison, build_summary
 
     cfg = _build_config(args.nav)
+    args.strategy = _dedup_strategies(args.strategy)
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
     provider = _build_provider(args, cfg, symbols)  # read-only; reused across runs
     run_meta = {
@@ -202,6 +242,10 @@ def cmd_compare(args: argparse.Namespace) -> int:
         logger.info("compare | %s source=%s %s..%s interval=%s",
                     name, provider.source.value, args.start, args.end, args.interval)
         runs.append((name, bt.run(symbols, args.start, args.end, args.interval)))
+
+    # All runs share the date range + provider, so they share n_days; guard once.
+    if runs and _no_trading_days(runs[0][1], args.provider, args.start, args.end):
+        return 2  # refuse to write a comparison whose verdicts would misread as 'no edge'
 
     html = build_comparison(
         runs, title=args.title,
@@ -305,6 +349,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ok = False
         lines.append(f" [FAIL] vendor/swe NOT importable: {e}")
         lines.append("        -> git submodule update --init --recursive")
+
+    # 2b) Core scientific stack. numpy/pandas/scipy are needed for ANY backtest
+    # (scipy backs the honesty scorecard); pyarrow is only needed to replay a
+    # parquet *-store. Checking these here means a store read can't blow up deep in
+    # a traceback that 'doctor' just reported clean.
+    for mod in ("numpy", "pandas", "scipy"):
+        try:
+            __import__(mod)
+            lines.append(f" [ok ] {mod} importable")
+        except Exception as e:  # pragma: no cover - all three are hard deps under test
+            ok = False
+            lines.append(f" [FAIL] {mod} NOT importable: {e}  -> pip install -r requirements.txt")
+    try:
+        import pyarrow  # noqa: F401
+        lines.append(" [ok ] pyarrow importable (needed only for --provider *-store replay)")
+    except Exception:  # pragma: no cover - optional unless replaying a store
+        lines.append(" [warn] pyarrow NOT importable - only the *-store replay path needs "
+                     "it; synthetic runs are fine")
 
     # 3) Data availability for offline replay (synthetic always works).
     lines.append("-" * 64)

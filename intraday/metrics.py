@@ -54,12 +54,12 @@ class MetricsReport:
 
     def render(self) -> str:
         if self.data_source == "synthetic":
-            tag = "  *** SYNTHETIC DATA — NOT A REAL EDGE ***"
+            tag = "  *** SYNTHETIC DATA - NOT A REAL EDGE ***"
         else:
             tag = f"  [REAL DATA: {self.data_source}]"
         lines = [
             "=" * 64,
-            f" Intraday backtest — metrics report{tag}",
+            f" Intraday backtest - metrics report{tag}",
             "=" * 64,
             f" data source        : {self.data_source}",
             f" trading days       : {self.n_days}",
