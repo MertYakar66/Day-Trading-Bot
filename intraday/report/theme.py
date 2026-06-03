@@ -29,8 +29,10 @@ h3{font-size:13px;margin:18px 0 8px;color:var(--mut);text-transform:uppercase;le
 margin:0 0 22px;flex-wrap:wrap}
 .verdict--edge{background:rgba(63,185,80,.10);border:1px solid var(--pos)}
 .verdict--noedge{background:rgba(248,81,73,.08);border:1px solid var(--neg)}
+.verdict--nodata{background:rgba(110,118,129,.10);border:1px solid var(--mut)}
 .verdict__tag{font-size:20px;font-weight:800;letter-spacing:.02em}
 .verdict--edge .verdict__tag{color:var(--pos)}.verdict--noedge .verdict__tag{color:var(--neg)}
+.verdict--nodata .verdict__tag{color:var(--mut)}
 .verdict__detail{color:var(--mut);font-size:13px}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:0 0 24px}
 @media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}}
