@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
 
     (args.out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     ok = sum(1 for r in manifest if "error" not in r)
-    print(f"\nfetched {ok}/{len(args.symbols)} symbols → {args.out_dir} (manifest.json written)")
+    print(f"\nfetched {ok}/{len(args.symbols)} symbols -> {args.out_dir} (manifest.json written)")
     return 0
 
 

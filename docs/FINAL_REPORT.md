@@ -1,8 +1,8 @@
 # Final Report — Intraday Engine (Phase 0 + Phase 1 + Real-Data Path + Powered Eval)
 
-**Date:** 2026-06-02 · **Status:** Phase 0 + Phase 1 complete; real-data path wired
+**Date:** 2026-06-02 (results) · 2026-06-03 (launch-readiness refresh) · **Status:** Phase 0 + Phase 1 complete; real-data path wired
 (IBKR + Yahoo underlying); powered, multiple-testing-honest real-data evaluation
-run. 517 tests passing (lint + type-checked; v0.1.0 launch-readiness pass). · **Verdict: on 24 symbols × 59 real 5-min sessions, net of
+run. 521 tests passing (lint + type-checked; v0.1.0 launch-readiness pass). · **Verdict: on 24 symbols × 59 real 5-min sessions, net of
 costs, NO underlying-only strategy (reversion/breakout/momentum) shows an edge —
 all deflated-Sharpe ≈ 0, OOS fails. The engine reports the truth, not a fabricated
 edge.** See §0.
@@ -12,8 +12,8 @@ edge.** See §0.
 Data sourced from **anywhere except Theta** (Theta actively in use). The unlock:
 free **Yahoo** intraday (≈60 sessions of 5-min, with a browser UA) across a wide
 universe — far deeper than IBKR's ~1000-bar (~13-session) cap. Ingested a
-**24-symbol cross-section** (broad/sector ETFs + large-caps), **1,416 sessions**
-(2026-03-09..06-01). **Data integrity:** IBKR (ARCA) vs Yahoo (consolidated) 5-min
+**24-symbol cross-section** (broad/sector ETFs + large-caps), **1,416 symbol-sessions**
+(≈59 trading days × 24 symbols, 2026-03-09..06-01). **Data integrity:** IBKR (ARCA) vs Yahoo (consolidated) 5-min
 closes agreed to **< 2 bps** (mean 0.12–0.20 bps) over 936 SPY/QQQ bars each.
 
 Each strategy was run standalone per symbol (no concurrency-cap distortion), then
@@ -32,7 +32,7 @@ but t = 1.17 (insignificant) and, deflated for the 72-trial search, **DSR = 0.13
 exactly the "winner" a search over 72 zero-edge strategies throws up by luck. This
 is the harness earning its keep — it refuses to certify the best-looking fluke.
 
-**Cost attribution (whole 24-symbol, $2.4M book):** S3 gross ≈ **−$348 (flat — no
+**Cost attribution (whole 24-symbol, ~$2.4M aggregate notional, sizing-derived):** S3 gross ≈ **−$348 (flat — no
 predictive edge)** bled by **$12.4k** costs → net −$12.7k; S4/S5 are gross-*negative*
 (−$5.7k/−$3.8k: breakouts fade, 5-min momentum reverts) plus costs. ~3.2k–3.9k
 trades each.

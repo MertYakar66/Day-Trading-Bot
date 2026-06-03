@@ -74,10 +74,17 @@ def _build_config(nav: float | None) -> EngineConfig:
     return cfg
 
 
+_VERDICT_TEXT = {
+    "EDGE": "EDGE (rare!)",
+    "NO_EDGE": "NO demonstrated edge",
+    "INSUFFICIENT_DATA": "INSUFFICIENT DATA - too few days to judge (not an edge verdict)",
+}
+
+
 def _render_eval(result, *, n_trials: int) -> str:
     """A concise honesty scorecard appended to the report (clustered-t over trading
     days, bootstrap-CI Sharpe, and the multiple-testing-aware Deflated Sharpe)."""
-    from .eval import evaluate_result
+    from .eval import edge_verdict, evaluate_result
 
     ev = evaluate_result(result, n_trials=n_trials)
     return "\n".join([
@@ -87,7 +94,7 @@ def _render_eval(result, *, n_trials: int) -> str:
         f" Sharpe (ann, net)  : {ev.sharpe_ann:.2f}  95% CI [{ev.sharpe_ann_ci_lo:.2f}, {ev.sharpe_ann_ci_hi:.2f}]",
         f" P(Sharpe>0)        : {ev.psr_vs_zero:.3f}",
         f" deflated Sharpe    : {ev.deflated_sharpe:.3f}  (n_trials={ev.n_trials}; edge iff >= 0.95)",
-        f" VERDICT            : {'EDGE (rare!)' if ev.significant else 'NO demonstrated edge'}",
+        f" VERDICT            : {_VERDICT_TEXT[edge_verdict(ev)]}",
         "=" * 64,
     ])
 

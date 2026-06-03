@@ -514,12 +514,12 @@ to open-source (see `LICENSE` / `CHANGELOG.md`).
 
 ---
 
-## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#21)
+## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#22)
 
 A second audit→fix→adversarial-review pass after a fresh 10-dimension audit of the
 already-launch-ready engine. The audit found one outright shipping defect plus a
 cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
-**487 → 517**.
+**487 → 521**.
 
 - **#16 packaging (the real bug)** — `[tool.setuptools] packages = ["intraday"]`
   shipped only the 10 top-level modules and DROPPED every subpackage, so a clean
@@ -545,17 +545,27 @@ cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
 - **#20 test hardening** — `tests/test_stops.py` (the exported `sigma_stop_target` had
   0% behavioural coverage); OOS split-fraction bounds + rolling walk-forward; explicit
   `var_sr` DSR monotonicity; live `PaperLedger` `log_*` hooks tick-by-tick.
-- **#21 docs accuracy** — this entry; test count 487→517 across README/TASKS/
+- **#21 docs accuracy** — this entry; test count synced across README/TASKS/
   ARCHITECTURE/FINAL_REPORT; `THETA_TIER_PROBE.md` superseded banner + corrected
   adapter behaviour (`DataUnavailable`/`ThetaNotConnectedThisSession`, not a blanket
   `TierUnavailable`); PROGRESS S4/S5/OOS figures aligned to the committed eval JSON;
   `intraday/data/README.md` path fix.
+- **#22 verdict consistency (final-QA must-fix)** — the round-2 INSUFFICIENT-DATA
+  distinction (n_days<2) had been added only to the HTML dashboard/comparison, so the
+  CLI scorecard and JSON export still printed a definitive NO_EDGE for a 1-day run.
+  Centralized a three-state `edge_verdict` (EDGE / NO_EDGE / INSUFFICIENT_DATA) +
+  `INSUFFICIENT_DATA_MIN_DAYS` in `eval.stats` and routed all four surfaces through it.
+  Also: ASCII-hardened the operator scripts (live_paper_poll / fetch_yahoo /
+  ingest_ibkr / pull_theta) for the cp1252 console; a parity above-floor ffill test;
+  FINAL_REPORT date/symbol-session/notional wording. (+4 tests)
 
 Process note: each substantive PR's diff was adversarially re-reviewed (a 3-agent
 skeptical panel verified PR #17/#18 — guardrails confirmed intact, two wording nits
-fixed before merge). One operational lesson: a background review agent running a
-working-tree git command transiently clobbered uncommitted work — commit before
-launching background workflows that touch the shared tree.
+fixed before merge), and a final 4-agent holistic QA over merged `main` confirmed
+release-ready + guardrails-hold and surfaced the #22 verdict-consistency must-fix.
+One operational lesson: a background review agent running a working-tree git command
+transiently clobbered uncommitted work — commit before launching background workflows
+that touch the shared tree.
 
 ### Next step
 

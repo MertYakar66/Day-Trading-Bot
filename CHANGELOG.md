@@ -7,7 +7,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Post-0.1.0 hardening from a second audit pass (no version bump yet; the **NO-EDGE
-headline is unchanged**). Tests 487 → 517.
+headline is unchanged**). Tests 487 → 521.
 
 ### Fixed
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules
@@ -19,6 +19,14 @@ headline is unchanged**). Tests 487 → 517.
   longer prints "NO demonstrated edge" and exits 0 — `backtest`/`report`/`compare`
   warn on stderr, exit non-zero, and suppress the verdict (and write no misleading
   HTML). The dashboard shows an INSUFFICIENT DATA band (not NO-EDGE) when `n_days < 2`.
+- **Verdict consistency**: a single three-state verdict (`EDGE` / `NO_EDGE` /
+  `INSUFFICIENT_DATA`) is centralized in `eval.edge_verdict`, so the CLI scorecard,
+  the JSON export, and the HTML dashboard/comparison agree — a 1-day run now reads
+  INSUFFICIENT_DATA on every surface instead of a definitive NO_EDGE on some.
+- **Operator-script console output**: ASCII-hardened the print/log/help strings in
+  the operator scripts (`live_paper_poll`, `fetch_yahoo_universe`,
+  `ingest_ibkr_underlying`, `pull_theta_options_scoped`) so they don't mojibake on a
+  cp1252 Windows console.
 - **Windows console**: the synthetic-data banner used em-dashes that rendered as
   mojibake on cp1252; now ASCII (with a runtime-output ASCII test).
 - **Parity provenance**: the put-call-parity underlying path enforces a grid

@@ -158,6 +158,20 @@ def test_spot_to_bars_leading_gap_still_refused():
         spot_to_bars(spot, "SPX", DAY, "5m")
 
 
+def test_spot_to_bars_accepts_above_floor_and_ffills_trailing_tail():
+    """Coverage at/above the 0.8 floor with a trailing dead tail is ACCEPTED and the
+    tail is forward-filled (the interior/trailing-fill path; the canonical full-session
+    test has filled=0 and never exercises it)."""
+    open_utc, _ = session_bounds_utc(DAY)
+    # ~70 of 78 5-min slots covered (>= 0.8), no leading gap, ~8-slot trailing tail.
+    idx = pd.date_range(open_utc + pd.Timedelta(minutes=1), periods=350, freq="1min")
+    spot = pd.Series(np.linspace(6000.0, 6007.0, len(idx)), index=idx)
+    bars = spot_to_bars(spot, "SPX", DAY, "5m")
+    assert len(bars.frame) == 78                       # accepted (coverage >= 0.8, open covered)
+    tail = bars.frame["close"].to_numpy()[-4:]
+    assert (tail == tail[-1]).all()                    # trailing slots ffilled from last real value
+
+
 def test_parity_provider_min_coverage_threads_through():
     """A lenient min_coverage accepts a sparse session the 0.8 default refuses."""
     open_utc, _ = session_bounds_utc(DAY)

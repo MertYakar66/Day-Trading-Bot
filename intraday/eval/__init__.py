@@ -20,11 +20,13 @@ from __future__ import annotations
 
 from .stats import (
     DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD,
+    INSUFFICIENT_DATA_MIN_DAYS,
     StrategyEval,
     annualized_sharpe,
     clustered_t_stat,
     daily_pnl_from_result,
     deflated_sharpe_ratio,
+    edge_verdict,
     evaluate_daily_pnl,
     evaluate_result,
     expected_max_sharpe,
@@ -35,6 +37,7 @@ from .walkforward import chronological_split, walk_forward_windows
 
 __all__ = [
     "DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD",
+    "INSUFFICIENT_DATA_MIN_DAYS",
     "StrategyEval",
     "daily_pnl_from_result",
     "clustered_t_stat",
@@ -43,6 +46,7 @@ __all__ = [
     "probabilistic_sharpe_ratio",
     "expected_max_sharpe",
     "deflated_sharpe_ratio",
+    "edge_verdict",
     "evaluate_daily_pnl",
     "evaluate_result",
     "chronological_split",

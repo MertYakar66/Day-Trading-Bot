@@ -212,6 +212,17 @@ def test_backtest_duplicate_strategy_runs_one_trial(capsys):
     assert "n_trials=1" in out  # deduped to a single distinct trial, not 2
 
 
+def test_backtest_one_day_scorecard_is_insufficient_not_no_edge(capsys):
+    # Exactly one trading day: valid data, but too short to judge an edge. The CLI
+    # scorecard must say INSUFFICIENT DATA, not print a definitive verdict (parity with
+    # the HTML dashboard / JSON export).
+    rc = main(["backtest", "--start", "2026-05-04", "--end", "2026-05-04"])
+    out = capsys.readouterr().out
+    assert rc == 0  # a 1-day run is valid (not a no-data operator error)
+    assert "INSUFFICIENT DATA" in out
+    assert "NO demonstrated edge" not in out and "EDGE (rare" not in out
+
+
 # --------------------------------------------------------------------------- #
 # doctor verifies the core scientific stack (so a store read can't crash post-OK)
 # --------------------------------------------------------------------------- #

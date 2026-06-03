@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 72)
     print(" NOTE: PROCEED/*TRADE* reflects the gate under each strategy's ASSUMED edge")
     print(" (default 0.10). The powered real-data eval found NO demonstrated edge for")
-    print(" S3/S4/S5 — these are advisory paper signals, not evidence of alpha.")
+    print(" S3/S4/S5 - these are advisory paper signals, not evidence of alpha.")
     print("-" * 72)
     print(f" {'symbol':6} {'strat':18} {'verdict':8} {'side':5} {'size':>5} {'ev_net$':>9} {'reason'}")
     print("-" * 72)

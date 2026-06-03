@@ -14,7 +14,7 @@ import math
 from collections.abc import Mapping
 
 from ..backtest.engine import BacktestResult
-from ..eval import evaluate_result
+from ..eval import edge_verdict, evaluate_result
 from ..eval.stats import StrategyEval
 from ..metrics import MetricsReport, build_report
 
@@ -80,7 +80,7 @@ def summary_dict(
             "n_trials": ev.n_trials,
             "significant": bool(ev.significant),
         },
-        "verdict": "EDGE" if ev.significant else "NO_EDGE",
+        "verdict": edge_verdict(ev),  # EDGE / NO_EDGE / INSUFFICIENT_DATA (n_days < 2)
     }
 
 

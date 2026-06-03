@@ -114,6 +114,20 @@ def test_evaluate_noise_is_not_significant():
     assert ev.significant is False
 
 
+def test_edge_verdict_is_three_state_with_insufficient_precedence():
+    import dataclasses
+
+    from intraday.eval import edge_verdict
+
+    # < 2 days => INSUFFICIENT_DATA, regardless of significant
+    assert edge_verdict(evaluate_daily_pnl(pd.Series([100.0]))) == "INSUFFICIENT_DATA"
+    ev = evaluate_daily_pnl(_series(0.0, 100.0, 150, seed=9), n_trials=20)
+    assert edge_verdict(ev) == "NO_EDGE"                                   # enough days, not significant
+    assert edge_verdict(dataclasses.replace(ev, significant=True)) == "EDGE"
+    # insufficient overrides a (fabricated) significant flag
+    assert edge_verdict(dataclasses.replace(ev, n_days=1, significant=True)) == "INSUFFICIENT_DATA"
+
+
 def test_evaluate_explicit_var_sr_is_monotone_and_differs_from_default():
     """A larger cross-trial Sharpe variance raises the DSR benchmark (SR*), so the
     deflated Sharpe FALLS; and an explicit var_sr differs from the single-series
