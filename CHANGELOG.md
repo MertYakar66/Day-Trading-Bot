@@ -7,7 +7,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Post-0.1.0 hardening from a second audit pass (no version bump yet; the **NO-EDGE
-headline is unchanged**). Tests 487 → 521.
+headline is unchanged**). Tests 487 → 523.
 
 ### Fixed
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules
@@ -39,6 +39,9 @@ headline is unchanged**). Tests 487 → 521.
   caveat on a green EDGE verdict.
 - Tests for `sigma_stop_target`, OOS split bounds + rolling walk-forward, DSR `var_sr`
   monotonicity, and the live paper-ledger `log_*` hooks.
+- **Network-free is now enforced, not assumed**: an autouse test fixture blocks
+  outbound sockets, so the engine's "never connects" promise fails the suite loudly
+  if any test ever reaches the network (opt out with `@pytest.mark.allow_network`).
 
 ### Changed
 - `doctor` verifies the core scientific stack (numpy/pandas/scipy/pyarrow); duplicate
