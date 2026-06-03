@@ -27,10 +27,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 # Runtime deps are pinned in requirements.txt (kept editable so the SWE
-# submodule's own requirements can be reconciled by hand). This table is
-# intentionally light; the project is run from source, not installed. NOTE: the
-# read-only SWE quant dependency (vendor/swe) is NOT pip-installable — a working
-# install also needs that submodule on the path (see README -> Dependencies).
+# submodule's own requirements can be reconciled by hand), so this table stays
+# light. NOTE: the read-only SWE quant dependency (vendor/swe) is NOT
+# pip-installable — a working install also needs that submodule on the path AND
+# the scientific stack from requirements.txt (see README -> Dependencies). The
+# wheel itself imports cleanly; running a backtest additionally needs those.
 dependencies = []
 
 [project.optional-dependencies]
@@ -51,8 +52,16 @@ Repository = "https://github.com/MertYakar66/Day-Trading-Bot"
 # (equivalent to `python -m intraday ...`).
 intraday = "intraday.cli:main"
 
-[tool.setuptools]
-packages = ["intraday"]
+# Ship the WHOLE package tree. An explicit `packages = ["intraday"]` would ship
+# only the top-level modules and DROP every subpackage (backtest/, signals/,
+# data/, report/, eval/, risk/, authority/, execution/, features/, live/) — an
+# installed `intraday` console script would then ImportError on the first
+# `from .backtest.engine import ...`. Auto-discovery picks up `intraday` and all
+# `intraday.*` subpackages. (All report CSS/SVG is inlined in Python, so there is
+# no package data to declare.) tests/ and scripts/ are not part of the distribution.
+[tool.setuptools.packages.find]
+include = ["intraday*"]
+exclude = ["tests*", "scripts*", "vendor*"]
 
 # --------------------------------------------------------------------------
 # pytest: make BOTH this repo (for `import intraday`) and the read-only SWE
