@@ -114,6 +114,18 @@ def test_evaluate_noise_is_not_significant():
     assert ev.significant is False
 
 
+def test_evaluate_explicit_var_sr_is_monotone_and_differs_from_default():
+    """A larger cross-trial Sharpe variance raises the DSR benchmark (SR*), so the
+    deflated Sharpe FALLS; and an explicit var_sr differs from the single-series
+    fallback (var_sr=None)."""
+    s = _series(15.0, 100.0, 200, seed=11)
+    small_var = evaluate_daily_pnl(s, n_trials=20, var_sr=1e-4)
+    big_var = evaluate_daily_pnl(s, n_trials=20, var_sr=1.0)
+    default = evaluate_daily_pnl(s, n_trials=20)  # var_sr=None -> single-series estimate (small)
+    assert big_var.deflated_sharpe < small_var.deflated_sharpe   # more spread => harder
+    assert default.deflated_sharpe > big_var.deflated_sharpe     # default var_sr << 1.0 => less deflated
+
+
 # --------------------------------------------------------------------------- #
 # Walk-forward / chronological split (leakage-free)
 # --------------------------------------------------------------------------- #
@@ -133,6 +145,30 @@ def test_walk_forward_windows_are_sequential():
     for w in folds:
         assert max(w.train) < min(w.test)  # test strictly follows train
         assert set(w.train).isdisjoint(w.test)
+
+
+def test_chronological_split_rejects_degenerate_fracs():
+    days = [date(2026, 3, d) for d in range(1, 11)]
+    for bad in (0.0, 1.0, -0.1, 1.5):
+        with pytest.raises(ValueError, match="train_frac"):
+            chronological_split(days, train_frac=bad)
+
+
+def test_walk_forward_windows_empty_when_underpowered():
+    # n < min_train + n_folds => no fold can be formed (don't fabricate folds from too little data)
+    few = [d.date() for d in pd.date_range("2026-03-01", periods=8)]
+    assert walk_forward_windows(few, n_folds=4, min_train=10) == []
+
+
+def test_walk_forward_rolling_window_moves_forward_no_lookahead():
+    days = [d.date() for d in pd.date_range("2026-03-01", periods=40)]
+    folds = walk_forward_windows(days, n_folds=3, expanding=False, min_train=10)
+    assert len(folds) >= 2
+    for w in folds:
+        assert max(w.train) < min(w.test)          # leakage-free: test strictly follows train
+        assert set(w.train).isdisjoint(w.test)
+    # rolling (not expanding): a later fold's train starts AFTER an earlier fold's
+    assert min(folds[-1].train) > min(folds[0].train)
 
 
 def test_daily_pnl_from_result_diffs_equity_curve():
