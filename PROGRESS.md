@@ -477,3 +477,42 @@ only), both behind the same gate, reusing the GEX/VRP features already built and
 tested. Then a paper ledger (`execution/`) matching the backtest record shape.
 Phase-1 also: add open_interest to the proposal (so options price OI in both gate
 and fills), and an open-MTM daily kill-switch in the live/paper path.
+
+---
+
+## Session 2026-06-03 — launch-readiness pass (v0.1.0; PRs #9–#14)
+
+A six-PR pass to make the product launch-ready (paper-only research; the **NO-EDGE
+headline is unchanged** — this improved the product *around* the result, never
+manufactured an edge). Driven by a 12-dimension multi-agent audit (2 critical /
+5 high / 17 medium / rest low-nit); **every PR's diff was adversarially re-reviewed**
+(findings verified-or-refuted), and a final holistic QA pass over merged `main`
+confirmed guardrails + artifacts clean. Tests **419 → 487**; added ruff + mypy CI gates.
+
+- **#9 backend robustness** — `read_bars` refuses a missing provenance sidecar;
+  `assert_finite_bars` (empty/NaN/inf) wired into the engine; bar-grid check compares
+  timestamps not just counts; `EngineConfig` `__post_init__` validators; S3/S4/S5 use
+  S1's explicit strictly-positive geometry guard; SVG non-finite-colour safety;
+  named `DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD`. (+29 tests)
+- **#10 CLI/dev UX** — strategy registry (single source of truth); `version`,
+  `strategies`, `doctor` (env health; never probes Theta/network); Windows `--help`
+  Unicode→ASCII fix. (+20 tests)
+- **#11 report aesthetics** — Sortino/Calmar KPIs; colour-blind ▲/▼ chevrons; rolling
+  Sharpe; per-symbol breakdown; `@media print`; `scripts/gen_samples.py`. (+7 tests)
+- **#12 repo/packaging/CI/docs** — pyproject metadata + PEP 639 license + console
+  script + `[dev]` extra; ruff + mypy CI-gated (pinned); CI lint job + 3.11/3.12
+  matrix; LICENSE/CONTRIBUTING/CHANGELOG/CODEOWNERS/pre-commit; doc-drift fixes.
+- **#13 test hardening** — kill-switch latch, feed-gap boundary, degenerate eval,
+  zero-trade metrics, SVG extremes, JSON determinism, poller-unavailable, multi-day
+  ledger. (+11 tests)
+- **#14 S2 honesty guard** — stand aside when the realized-vol estimate is degenerate
+  (`sigma_real <= 0`) rather than emit an over-confident trade; + DESIGN S4/S5 note;
+  + backtest cost-assumption help note. (+1 test)
+
+**LICENSE** is a deliberately reversible **proprietary** default — swap for MIT/Apache
+to open-source (see `LICENSE` / `CHANGELOG.md`).
+
+### Next step
+
+S1/S2 still await the Theta options backfill (operator, offline) before a real-data
+verdict; Phase 2 (equities) and acceptance thresholds remain operator decisions.
