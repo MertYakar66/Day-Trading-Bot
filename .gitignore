@@ -6,6 +6,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Build artifacts (regenerable via `python -m build`; the CI `package` job builds
+# them in a throwaway dir). Never commit the wheel/sdist.
+build/
+dist/
+
 # Virtual environments
 .venv/
 venv/
