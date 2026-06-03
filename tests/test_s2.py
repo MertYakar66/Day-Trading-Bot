@@ -125,3 +125,13 @@ def test_gate_ev_consistent_with_proposal():
     expected_gross = p.win_prob * p.win_amount - (1 - p.win_prob) * p.loss_amount
     assert res.ev_gross == pytest.approx(expected_gross)
     assert res.ev_net == pytest.approx(res.ev_gross - res.cost.total)
+
+
+def test_no_trade_when_realized_vol_degenerate():
+    """A non-positive realized-vol estimate (flat/degenerate RV window) must NOT
+    produce an over-confident trade: P(inside) would collapse to a certainty and
+    inflate win_prob to the 0.99 cap on no real evidence. S2 stands aside instead."""
+    s2 = S2ZeroDteVrp()
+    # rv = 0 => VRP = atm_iv (rich) and gamma positive, so it clears the entry gate,
+    # but sigma_real == 0 must trip the honesty guard.
+    assert s2.propose(_row(atm_iv=0.16, rv=0.0), config=EngineConfig.default()) is None

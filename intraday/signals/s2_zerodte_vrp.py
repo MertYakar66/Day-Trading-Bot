@@ -102,6 +102,12 @@ class S2ZeroDteVrp:
         sigma_real = fr.rv * math.sqrt(t) * spot
         if sigma_impl <= 0:
             return None
+        # Honesty guard: a non-positive realized-vol estimate (a flat/degenerate RV
+        # window) would make P(inside) collapse to a certainty (_p_inside returns 1.0
+        # for sigma<=0), inflating win_prob to the 0.99 cap on no real evidence. Refuse
+        # to trade on an un-assessable realized distribution rather than guess.
+        if sigma_real <= 0:
+            return None
 
         short_width = self.k_short * sigma_impl
         wing_width = self.wing_mult * sigma_impl

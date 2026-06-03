@@ -296,7 +296,9 @@ Every candidate signal flows through one gate; reviewers can only **downgrade**.
   TASKS.md             # ordered build backlog
   data/                # Theta pull/stream adapters + parquet store helpers
   features/            # intraday feature builders (GEX, OFI, VRP, VWAP…)
-  signals/             # S1 gamma, S2 0DTE-VRP, S3 VWAP/ORB
+  signals/             # S1 gamma, S2 0DTE-VRP, S3 VWAP/ORB (+ S4 ORB-breakout,
+                       #   S5 VWAP-momentum: underlying-only, added for the real-data
+                       #   evaluation — see PROGRESS.md; not part of the §5 Phase-1 spec)
   authority/           # the expectancy gate + downgrade-only reviewers
   risk/                # sizing, stops, daily kill-switch
   execution/           # paper ledger now; broker adapter later (Alpaca/IBKR)
