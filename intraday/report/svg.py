@@ -467,6 +467,10 @@ def waterfall(
 # --------------------------------------------------------------------------- #
 def _diverging(t: float) -> str:
     """Map ``t`` in [-1, 1] to a red(-)/slate(0)/green(+) hex colour."""
+    # NaN/inf would survive min/max clamping (NaN comparisons are falsy) and round()
+    # to an unpredictable channel value — treat a non-finite ratio as the neutral mid.
+    if not _isfinite(t):
+        t = 0.0
     t = max(-1.0, min(1.0, t))
     neg = (248, 81, 73)     # DOWN
     mid = (45, 51, 64)      # slate
@@ -501,6 +505,10 @@ def heatmap(
     width = row_label_w + n_cols * cell + 8
     height = col_label_h + n_rows * cell + 8
 
+    # A non-finite vmax (NaN/inf) is truthy, so it would slip past ``scale or 1.0``
+    # and poison every cell's colour ratio — fall back to the data-derived scale.
+    if not _isfinite(vmax):
+        vmax = None
     flat = [abs(float(v)) for row in matrix for v in row if v is not None and v == v]
     scale = vmax if vmax is not None else (max(flat) if flat else 1.0)
     scale = scale or 1.0

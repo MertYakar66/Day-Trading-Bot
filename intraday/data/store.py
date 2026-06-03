@@ -70,12 +70,17 @@ class ParquetStore:
             raise FileNotFoundError(f"no bars at {path}")
         frame = pd.read_parquet(path, engine="pyarrow")
         meta_path = part / f"bars_{interval}_meta.json"
-        if meta_path.exists():
-            meta = json.loads(meta_path.read_text())
-            source = DataSource(meta["source"])
-            latency = pd.Timedelta(milliseconds=meta["latency_ms"])
-        else:  # pragma: no cover - sidecar always written by write_bars
-            source, latency = DataSource.SYNTHETIC, pd.Timedelta(0)
+        # Recover provenance + latency from the sidecar. Like read_tape/read_chain,
+        # we REFUSE to guess when it is missing: silently relabelling a parquet of
+        # real IBKR/Yahoo bars as SYNTHETIC would violate the honesty guardrail
+        # (never mislabel real vs synthetic data).
+        if not meta_path.exists():
+            raise FileNotFoundError(
+                f"missing provenance sidecar {meta_path}; refusing to assume a data source"
+            )
+        meta = json.loads(meta_path.read_text())
+        source = DataSource(meta["source"])
+        latency = pd.Timedelta(milliseconds=meta["latency_ms"])
         return BarSeries(symbol.upper(), interval, frame, source, latency)
 
     # -- option tape ---------------------------------------------------- #

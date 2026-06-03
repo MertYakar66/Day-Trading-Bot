@@ -67,10 +67,13 @@ class S4OpeningRangeBreakout:
         else:
             return None
 
+        # Strictly positive geometry (mirrors S1) — p_fair is a true gambler's-ruin
+        # probability, never a silent 0.5 fallback.
         reward = abs(target - ref)
         risk = abs(ref - stop)
-        denom = reward + risk
-        p_fair = (risk / denom) if denom > 0 else 0.5
+        if reward <= 0 or risk <= 0:
+            return None
+        p_fair = risk / (reward + risk)
         win_prob = min(0.99, max(0.01, p_fair + self.edge))
         spread = config.cost.fallback_spread_pct * ref
 

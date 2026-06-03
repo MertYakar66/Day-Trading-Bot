@@ -19,6 +19,7 @@ out-of-sample, and let "no edge" be the answer when it is the truth.
 from __future__ import annotations
 
 from .stats import (
+    DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD,
     StrategyEval,
     annualized_sharpe,
     clustered_t_stat,
@@ -33,6 +34,7 @@ from .stats import (
 from .walkforward import chronological_split, walk_forward_windows
 
 __all__ = [
+    "DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD",
     "StrategyEval",
     "daily_pnl_from_result",
     "clustered_t_stat",

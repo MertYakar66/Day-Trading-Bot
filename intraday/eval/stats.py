@@ -21,6 +21,13 @@ from scipy import stats as _ss
 
 _EULER_GAMMA = 0.5772156649015329
 
+# A strategy is credited with a demonstrated edge only if its Deflated Sharpe Ratio
+# (the multiple-testing-honest P(true Sharpe > 0)) clears this one-sided 5% bar.
+# This is the SOLE authority for the EDGE / NO-EDGE verdict everywhere (the report
+# banner, the CLI scorecard) — defined once here so the threshold is never a magic
+# number scattered across modules.
+DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD = 0.95
+
 
 def daily_pnl_from_result(result) -> pd.Series:
     """Portfolio daily PnL ($) from a BacktestResult's equity curve.
@@ -203,7 +210,7 @@ def evaluate_daily_pnl(
     trials' daily Sharpes for a proper DSR; defaults to the single-series estimator
     variance, which is conservative-ish but less ideal).
     """
-    x = pd.Series(np.asarray(daily, dtype="float64"))
+    x = np.asarray(daily, dtype="float64")
     x = x[np.isfinite(x)]
     n = len(x)
     if n < 2:
@@ -222,7 +229,10 @@ def evaluate_daily_pnl(
         n_boot=n_boot, rng_seed=rng_seed,
     )
     psr0 = probabilistic_sharpe_ratio(sr_daily, n, skew, kurt, sr_star=0.0)
-    # Variance of the per-period Sharpe across trials (DSR deflation input).
+    # DSR deflation input. The IDEAL var_sr is the cross-trial variance of the
+    # per-period Sharpe (pass it explicitly). When absent we fall back to the
+    # single-series estimator variance of this Sharpe — conservative-ish, but not a
+    # true cross-trial spread (see the docstring).
     if var_sr is None:
         var_sr = (1.0 - skew * sr_daily + ((kurt - 1.0) / 4.0) * sr_daily ** 2) / (n - 1)
     dsr = deflated_sharpe_ratio(sr_daily, n, skew, kurt, n_trials=n_trials, var_sr=var_sr)
@@ -241,5 +251,8 @@ def evaluate_daily_pnl(
         psr_vs_zero=psr0,
         n_trials=n_trials,
         deflated_sharpe=dsr,
-        significant=bool(dsr >= 0.95) if math.isfinite(dsr) else False,
+        significant=(
+            bool(dsr >= DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD)
+            if math.isfinite(dsr) else False
+        ),
     )

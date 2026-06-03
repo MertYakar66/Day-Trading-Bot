@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from ..timeutils import parse_interval
-from .provider import FeedGapError
+from .provider import DataUnavailable, FeedGapError
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,13 @@ class LiquidityCheck:
 
 
 def spread_bps(spread: float, price: float) -> float:
-    """Bid-ask spread in basis points of price (inf if price <= 0)."""
+    """Bid-ask spread in basis points of price.
+
+    Returns ``inf`` for un-assessable / malformed quotes so callers treat them as
+    illiquid (skip) rather than tradeable: a non-positive price, or a NEGATIVE
+    spread (ask < bid is crossed/malformed market data). A zero spread is valid
+    and returns ``0.0`` bps.
+    """
     if price <= 0 or spread < 0:
         return float("inf")
     return (spread / price) * 10_000.0
@@ -95,3 +101,33 @@ def assert_no_feed_gap(
             f"{interval}×{max_gap_factor}); halting per DESIGN §2.4 (no look-ahead "
             "interpolation over missing bars)."
         )
+
+
+_PRICE_COLUMNS: tuple[str, ...] = ("open", "high", "low", "close")
+
+
+def assert_finite_bars(frame: pd.DataFrame, *, symbol: str = "?", day=None) -> None:
+    """Halt on a malformed bar frame rather than propagate NaN/inf into equity.
+
+    Replaying real data, a provider can hand back an empty session or a bar with a
+    non-finite OHLC price (a feed glitch, a corrupt parquet cell). Either would
+    silently poison fill prices, stop/target detection and the equity curve
+    (``int(inf)`` also crashes downstream), so we surface it loudly as a data
+    problem (:class:`~intraday.data.provider.DataUnavailable`) — the same "halt,
+    never guess" discipline as :func:`assert_no_feed_gap`.
+    """
+    where = f"{symbol}" + (f" on {day}" if day is not None else "")
+    if frame is None or len(frame) == 0:
+        raise DataUnavailable(f"empty bar frame for {where}; cannot run a session on no data")
+    import numpy as np
+
+    for col in _PRICE_COLUMNS:
+        if col not in frame.columns:
+            raise DataUnavailable(f"bar frame for {where} missing required column {col!r}")
+        arr = frame[col].to_numpy(dtype="float64", copy=False)
+        if not np.isfinite(arr).all():
+            n_bad = int((~np.isfinite(arr)).sum())
+            raise DataUnavailable(
+                f"non-finite {col} price(s) in bar frame for {where} "
+                f"({n_bad} bad of {len(arr)}); refusing to trade on malformed data"
+            )
