@@ -148,3 +148,76 @@ def test_subcommand_help_is_ascii(cmd, capsys):
     with pytest.raises(SystemExit):
         main([cmd, "--help"])
     capsys.readouterr().out.encode("ascii")  # raises if any non-ASCII slipped in
+
+
+def test_backtest_runtime_output_is_ascii(capsys):
+    """The RUNTIME report (metrics banner + honesty scorecard) must be ASCII too:
+    an em-dash in the 'SYNTHETIC DATA - NOT A REAL EDGE' banner renders as mojibake
+    on a cp1252 Windows console. The help-text ASCII tests above did not cover this
+    output path."""
+    rc = main(["backtest", "--start", "2026-05-04", "--end", "2026-05-06"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    out.encode("ascii")  # raises if any non-ASCII reached the console output
+    assert "SYNTHETIC DATA" in out  # the honesty banner is present (and now ASCII-safe)
+    assert "VERDICT" in out         # the scorecard renders on a real (non-empty) run
+
+
+# --------------------------------------------------------------------------- #
+# No-data guard: a zero-trading-day run must not masquerade as 'no edge'
+# --------------------------------------------------------------------------- #
+def test_backtest_no_data_warns_and_suppresses_verdict(capsys):
+    # Reversed dates => trading_days() == [] => a zero-day run.
+    rc = main(["backtest", "--start", "2026-05-29", "--end", "2026-05-01"])
+    cap = capsys.readouterr()
+    assert rc == 2                                   # non-zero: the operator made a mistake
+    assert "no trading days" in cap.err.lower()
+    assert "no-data run" in cap.err.lower()
+    assert "VERDICT" not in cap.out                  # the meaningless verdict is suppressed
+
+
+def test_report_no_data_does_not_write_html(tmp_path, capsys):
+    out = tmp_path / "dash.html"
+    rc = main(["report", "--start", "2026-05-29", "--end", "2026-05-01",
+               "--out", str(out)])
+    assert rc == 2
+    assert "no trading days" in capsys.readouterr().err.lower()
+    assert not out.exists()  # never write a dashboard whose verdict would misread as 'no edge'
+
+
+def test_compare_no_data_does_not_write_html(tmp_path, capsys):
+    # compare runs N strategies; the guard checks the shared n_days once after the loop.
+    out = tmp_path / "cmp.html"
+    rc = main(["compare", "--start", "2026-05-29", "--end", "2026-05-01",
+               "--out", str(out)])
+    assert rc == 2
+    assert "no trading days" in capsys.readouterr().err.lower()
+    assert not out.exists()
+
+
+# --------------------------------------------------------------------------- #
+# Duplicate --strategy keys must not inflate the trial count
+# --------------------------------------------------------------------------- #
+def test_dedup_strategies_preserves_first_seen_order():
+    from intraday.cli import _dedup_strategies
+
+    assert _dedup_strategies(["s4", "s3", "s4", "s3", "s5"]) == ["s4", "s3", "s5"]
+
+
+def test_backtest_duplicate_strategy_runs_one_trial(capsys):
+    rc = main(["backtest", "--strategy", "s3", "s3",
+               "--start", "2026-05-04", "--end", "2026-05-06"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "n_trials=1" in out  # deduped to a single distinct trial, not 2
+
+
+# --------------------------------------------------------------------------- #
+# doctor verifies the core scientific stack (so a store read can't crash post-OK)
+# --------------------------------------------------------------------------- #
+def test_doctor_checks_scientific_stack(tmp_path, capsys):
+    main(["doctor", "--store-root", str(tmp_path / "empty")])
+    out = capsys.readouterr().out
+    assert "numpy importable" in out
+    assert "pandas importable" in out
+    assert "scipy importable" in out
