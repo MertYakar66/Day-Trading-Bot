@@ -386,7 +386,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"intraday-engine {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
-    bt = sub.add_parser("backtest", help="Run the Phase-0 backtest and print metrics.")
+    bt = sub.add_parser(
+        "backtest", help="Run the Phase-0 backtest and print metrics.",
+        epilog="All figures are NET of modelled transaction costs (a conservative "
+               "estimate for liquid index ETFs from intraday.config.CostConfig, not a "
+               "broker quote); tune costs there for your account/size.",
+    )
     _add_run_args(bt)
     bt.add_argument("--no-eval", dest="no_eval", action="store_true",
                     help="skip the honesty scorecard (clustered-t / bootstrap-CI Sharpe / deflated Sharpe)")
