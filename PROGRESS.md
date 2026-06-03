@@ -133,12 +133,12 @@ aggregated to an equal-weight portfolio:
 | strat | portfolio Sharpe (ann) | 95% CI | day t | DSR over 72 trials |
 |---|---|---|---|---|
 | S3 reversion | −2.83 | [−5.39, 0.14] | −1.37 | **0.000** |
-| S4 ORB breakout | −2.65 | [−6.75, 0.89] | −1.28 | **0.000** |
-| S5 VWAP momentum | −4.86 | [−9.73, −1.09] | −2.35 | **0.000** |
+| S4 ORB breakout | −2.76 | [−6.85, 0.77] | −1.34 | **0.000** |
+| S5 VWAP momentum | −4.89 | [−9.94, −1.07] | −2.37 | **0.000** |
 
 - **Deflated Sharpe ≈ 0 for all** — after discounting 72 strategy×symbol trials,
   none has any probability of a true positive Sharpe.
-- **OOS:** best-on-train (S4) did *worse* on the held-out half (test Sharpe −7.07).
+- **OOS:** best-on-train (S4) did *worse* on the held-out half (test Sharpe −7.12).
 - **Cost attribution (whole 24-symbol book):** S3 gross ≈ **−$348 (flat — no
   predictive edge)**, bled by **$12.4k** costs; S4/S5 are gross-*negative* too
   (breakouts fade, 5-min momentum reverts) plus costs. ~3.3k–3.9k trades each.
@@ -350,7 +350,7 @@ A complete, tested, paper-only intraday engine under the `intraday/` package:
   (`pythonpath`), root `conftest.py`, and `intraday/_vendor.py`. `import
   engine.*` / `import backtests.*` resolve; verified all consumed modules import
   under numpy 2.4 / pandas 3.0.
-- **P0 tier probe.** Recorded in `data/README.md` and `docs/THETA_TIER_PROBE.md`:
+- **P0 tier probe.** Recorded in `intraday/data/README.md` and `docs/THETA_TIER_PROBE.md`:
   FREE tier, intraday data gated. (Probe run once before the no-Theta instruction
   arrived; not repeated.)
 - **T0.1 DataProvider interface + providers.** `intraday/data/provider.py`
@@ -512,7 +512,53 @@ confirmed guardrails + artifacts clean. Tests **419 → 487**; added ruff + mypy
 **LICENSE** is a deliberately reversible **proprietary** default — swap for MIT/Apache
 to open-source (see `LICENSE` / `CHANGELOG.md`).
 
+---
+
+## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#21)
+
+A second audit→fix→adversarial-review pass after a fresh 10-dimension audit of the
+already-launch-ready engine. The audit found one outright shipping defect plus a
+cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
+**487 → 517**.
+
+- **#16 packaging (the real bug)** — `[tool.setuptools] packages = ["intraday"]`
+  shipped only the 10 top-level modules and DROPPED every subpackage, so a clean
+  `pip install`'d `intraday` console script crashed on the first import (verified by
+  building the wheel: 10 files / 0 subpackages → 63 files / 10 subpackages after the
+  fix). Switched to auto-discovery; added a network-free CI `package` job that builds
+  the wheel, installs it in a throwaway venv, and smoke-imports every subpackage +
+  the entry point from outside the source tree. `.gitignore` build/ dist/.
+- **#17 CLI honesty/robustness** — a zero-trading-day run (reversed dates / un-ingested
+  store) used to print "NO demonstrated edge" and exit 0; now `backtest`/`report`/
+  `compare` warn on stderr, exit 2, and suppress the verdict (report/compare write no
+  misleading file). ASCII fix for the synthetic banner em-dashes (cp1252 mojibake);
+  `doctor` checks numpy/pandas/scipy/pyarrow; duplicate `--strategy` keys de-duped.
+- **#18 report/eval honesty** — INSUFFICIENT-DATA verdict (n_days<2) distinct from
+  NO-EDGE; small-`n_trials` caveat on a green EDGE; i.i.d. serial-dependence
+  disclosure (scorecard / comparison / `stats` docstrings / `eval_real_universe`),
+  qualified as short-range; shared `_chart_money` (minus before the `$`) so charts and
+  KPIs format negatives identically. No computation changed.
+- **#19 parity coverage gate** — `spot_to_bars` now measures grid coverage by real
+  reconstructed quotes before ffill and refuses below `min_coverage` (0.8, matching
+  `_remap`), so a heavily-ffilled parity session is never mislabelled solid
+  `[REAL DATA: parity]`.
+- **#20 test hardening** — `tests/test_stops.py` (the exported `sigma_stop_target` had
+  0% behavioural coverage); OOS split-fraction bounds + rolling walk-forward; explicit
+  `var_sr` DSR monotonicity; live `PaperLedger` `log_*` hooks tick-by-tick.
+- **#21 docs accuracy** — this entry; test count 487→517 across README/TASKS/
+  ARCHITECTURE/FINAL_REPORT; `THETA_TIER_PROBE.md` superseded banner + corrected
+  adapter behaviour (`DataUnavailable`/`ThetaNotConnectedThisSession`, not a blanket
+  `TierUnavailable`); PROGRESS S4/S5/OOS figures aligned to the committed eval JSON;
+  `intraday/data/README.md` path fix.
+
+Process note: each substantive PR's diff was adversarially re-reviewed (a 3-agent
+skeptical panel verified PR #17/#18 — guardrails confirmed intact, two wording nits
+fixed before merge). One operational lesson: a background review agent running a
+working-tree git command transiently clobbered uncommitted work — commit before
+launching background workflows that touch the shared tree.
+
 ### Next step
 
-S1/S2 still await the Theta options backfill (operator, offline) before a real-data
-verdict; Phase 2 (equities) and acceptance thresholds remain operator decisions.
+Unchanged: S1/S2 still await the Theta options backfill (operator, offline) before a
+real-data verdict; Phase 2 (equities) and acceptance thresholds remain operator
+decisions. The reversible proprietary LICENSE is the one open product decision.

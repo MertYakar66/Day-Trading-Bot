@@ -105,7 +105,7 @@ indirectly), `performance_metrics` (metrics.py), `event_gate` + `event_calendar`
 python -m intraday backtest --start 2026-05-01 --end 2026-05-29              # S3 control (NET metrics)
 python -m intraday backtest --symbols SPY --strategy s1 --start 2026-05-04 --end 2026-05-08
 python -m intraday backtest --symbols SPY --strategy s2 --start 2026-05-04 --end 2026-05-08
-pytest                                                                       # full suite (487 tests, network-free)
+pytest                                                                       # full suite (517 tests, network-free)
 ruff check intraday tests scripts && mypy                                    # lint + type-check (CI gates)
 ```
 

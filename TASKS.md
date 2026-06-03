@@ -1,7 +1,7 @@
 # Day-Trading-Bot — build backlog
 
 > **Status (2026-06-03): Phase 0 + Phase 1 COMPLETE and green** (synthetic + a wired
-> real-data path; 487 tests, lint + type-checked — see `PROGRESS.md` / `CHANGELOG.md`).
+> real-data path; 517 tests, lint + type-checked — see `PROGRESS.md` / `CHANGELOG.md`).
 > Phase 1 tasks T1.1–T1.3 below are done (`[x]`). Run the engine with
 > `python -m intraday backtest --start 2026-05-01 --end 2026-05-29`.
 
@@ -41,7 +41,7 @@ explicit done-criteria. Read [`DESIGN.md`](DESIGN.md) before starting and
 - [ ] **P0. Confirm the Theta tier** *(human / laptop — not doable in a
       sandbox)*. Run `scripts/probe_theta_capabilities.py` in the SWE checkout
       with the Terminal up. Confirm real-time intraday **stock** and **option
-      tape** are unlocked. Record the result in `data/README.md`. *Blocks all
+      tape** are unlocked. Record the result in `intraday/data/README.md`. *Blocks all
       data tasks.*
 
 ---
