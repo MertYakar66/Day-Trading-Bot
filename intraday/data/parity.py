@@ -32,6 +32,7 @@ from ..contracts import BAR_COLUMNS, BarSeries, DataSource, OptionChainSeries, O
 from ..logging_config import get_logger
 from ..timeutils import bar_close_index, parse_interval, session_bounds_utc
 from ..timeutils import trading_days as _td
+from ._remap import GridCoverage
 from .provider import DataProvider, DataUnavailable
 
 logger = get_logger(__name__)
@@ -111,11 +112,21 @@ def spot_to_bars(
     *,
     session: SessionConfig | None = None,
     latency: pd.Timedelta | None = None,
+    min_coverage: float = 0.8,
 ) -> BarSeries:
     """Resample a reconstructed spot point-series into canonical-grid OHLC bars.
 
     No volume is available from parity (price, not size) → volume is 0, like an
     index. The frame is reindexed onto :func:`bar_close_index` and ffilled.
+
+    Coverage discipline (mirrors the IBKR/Yahoo :mod:`intraday.data._remap` path):
+    we measure how much of the canonical grid is backed by a REAL reconstructed
+    quote BEFORE forward-filling, and refuse the session if that fraction is below
+    ``min_coverage``. Without this, a session reconstructed from a handful of quotes
+    would be ffilled to a full grid and silently presented as solid
+    ``[REAL DATA: parity]`` — the exact mislabelling the store-provenance guards
+    exist to prevent. Interior/trailing gaps under the floor are still ffilled
+    (PIT-safe, past-only) but logged.
     """
     session = session or SessionConfig()
     latency = latency if latency is not None else pd.Timedelta(milliseconds=250)
@@ -126,16 +137,36 @@ def spot_to_bars(
     agg = spot.sort_index().resample(step, label="right", closed="right").agg(
         ["first", "max", "min", "last"]
     )
+    # Coverage of the canonical grid by REAL reconstructed quotes (pre-ffill).
+    reindexed = agg.reindex(target)
+    present_mask = reindexed["last"].notna()
+    present = int(present_mask.sum())
+    expected = len(target)
+    leading_missing = int(present_mask.to_numpy().argmax()) if present else expected
+    cov = GridCoverage(symbol.upper(), day, expected, present,
+                       expected - present - leading_missing, leading_missing)
+    if present == 0 or cov.coverage < min_coverage:
+        raise DataUnavailable(
+            f"parity {symbol} {day}: grid coverage {cov.coverage:.0%} "
+            f"({present}/{expected}) below {min_coverage:.0%} - refusing to present a "
+            "mostly-reconstructed session as solid bars (would mislabel ffill as real)."
+        )
     # Forward-fill only (carry the last known reconstructed spot forward — PIT-safe).
     # We deliberately do NOT back-fill: a LEADING gap (no quote before the first
     # grid slot) would otherwise pull a FUTURE spot backward into a tradeable bar
     # (the same look-ahead fixed on the IBKR path). If the open is uncovered we
     # refuse the session rather than reconstruct it from the future.
-    agg = agg.reindex(target).ffill()
+    agg = reindexed.ffill()
     if bool(agg["last"].isna().any()):
         raise DataUnavailable(
             f"parity quotes do not cover the {symbol} {day} session open "
-            f"(leading gap); refusing to back-fill the open from a future quote."
+            f"(leading gap of {leading_missing} bars); refusing to back-fill the open "
+            "from a future quote."
+        )
+    if cov.filled:
+        logger.info(
+            "parity %s %s: forward-filled %d/%d missing %s bars (coverage %.1f%%)",
+            symbol, day, cov.filled, expected, interval, cov.coverage * 100,
         )
     out = pd.DataFrame(index=target)
     out["open"] = agg["first"].to_numpy()
@@ -175,11 +206,13 @@ class ParityUnderlyingProvider(DataProvider):
         config: EngineConfig | None = None,
         r: float | None = None,
         q: float = 0.0,
+        min_coverage: float = 0.8,
     ) -> None:
         self.quote_source = quote_source
         self.config = config or EngineConfig.default()
         self.r = r if r is not None else self.config.gate.risk_free_rate
         self.q = q
+        self.min_coverage = min_coverage
 
     def trading_days(self, start: date, end: date) -> list[date]:
         return _td(start, end)
@@ -193,6 +226,7 @@ class ParityUnderlyingProvider(DataProvider):
             spot, symbol, day, interval,
             session=self.config.session,
             latency=pd.Timedelta(milliseconds=self.config.data.bar_latency_ms),
+            min_coverage=self.min_coverage,
         )
 
     def get_option_chain(self, symbol: str, day: date) -> OptionChainSeries:

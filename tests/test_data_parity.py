@@ -105,9 +105,11 @@ def test_reconstruct_spot_missing_columns_raises():
 
 
 def test_spot_to_bars_canonical_grid():
-    open_utc, _ = session_bounds_utc(DAY)
-    idx = pd.date_range(open_utc + pd.Timedelta(minutes=1), periods=300, freq="1min")
-    spot = pd.Series(np.linspace(6000.0, 6010.0, 300), index=idx)
+    open_utc, close_utc = session_bounds_utc(DAY)
+    # span the FULL session so grid coverage clears the 0.8 floor (this test exercises
+    # the grid mechanics, not the coverage gate — see the coverage tests below).
+    idx = pd.date_range(open_utc + pd.Timedelta(minutes=1), close_utc, freq="1min")
+    spot = pd.Series(np.linspace(6000.0, 6010.0, len(idx)), index=idx)
     bars = spot_to_bars(spot, "SPX", DAY, "5m")
     pd.testing.assert_index_equal(bars.frame.index, bar_close_index(DAY, "5m"))
     assert list(bars.frame.columns) == list(BAR_COLUMNS)
@@ -120,9 +122,9 @@ def test_spot_to_bars_canonical_grid():
 # Provider
 # --------------------------------------------------------------------------- #
 def test_parity_provider_get_bars():
-    open_utc, _ = session_bounds_utc(DAY)
-    idx = pd.date_range(open_utc + pd.Timedelta(minutes=5), periods=60, freq="5min")
-    true_spot = pd.Series(6000.0 + np.linspace(0, 8, 60), index=idx)
+    open_utc, close_utc = session_bounds_utc(DAY)
+    idx = pd.date_range(open_utc + pd.Timedelta(minutes=5), close_utc, freq="5min")
+    true_spot = pd.Series(6000.0 + np.linspace(0, 8, len(idx)), index=idx)
     quotes = _quotes_for_path(true_spot, strike=6000.0)
 
     prov = ParityUnderlyingProvider(lambda sym, day: quotes, config=EngineConfig.default(), q=Q)
@@ -131,6 +133,45 @@ def test_parity_provider_get_bars():
     assert len(bars.frame) == 78
     # Reconstructed close near the true terminal spot.
     assert bars.frame["close"].iloc[-1] == pytest.approx(6008.0, abs=1.0)
+
+
+# --------------------------------------------------------------------------- #
+# Coverage gate (#7): a heavily-reconstructed session must not pass as solid bars
+# --------------------------------------------------------------------------- #
+def test_spot_to_bars_low_coverage_raises():
+    """Too few quotes over the session => refuse, rather than ffill a sparse grid to
+    100% and mislabel it as solid 'REAL DATA: parity'."""
+    open_utc, _ = session_bounds_utc(DAY)
+    idx = pd.date_range(open_utc + pd.Timedelta(minutes=1), periods=120, freq="1min")  # ~2h
+    spot = pd.Series(np.linspace(6000.0, 6005.0, 120), index=idx)
+    with pytest.raises(DataUnavailable, match="coverage"):
+        spot_to_bars(spot, "SPX", DAY, "5m")
+
+
+def test_spot_to_bars_leading_gap_still_refused():
+    """Coverage can clear the floor yet the OPEN be uncovered; back-filling the open
+    from a future quote is look-ahead, so the session is refused (distinct guard)."""
+    open_utc, close_utc = session_bounds_utc(DAY)
+    idx = pd.date_range(open_utc + pd.Timedelta(minutes=35), close_utc, freq="1min")
+    spot = pd.Series(np.linspace(6000.0, 6010.0, len(idx)), index=idx)
+    with pytest.raises(DataUnavailable, match="leading gap"):
+        spot_to_bars(spot, "SPX", DAY, "5m")
+
+
+def test_parity_provider_min_coverage_threads_through():
+    """A lenient min_coverage accepts a sparse session the 0.8 default refuses."""
+    open_utc, _ = session_bounds_utc(DAY)
+    idx = pd.date_range(open_utc + pd.Timedelta(minutes=1), periods=180, freq="1min")  # ~3h
+    true_spot = pd.Series(6000.0 + np.linspace(0, 5, 180), index=idx)
+    quotes = _quotes_for_path(true_spot, strike=6000.0)
+    strict = ParityUnderlyingProvider(lambda s, d: quotes, config=EngineConfig.default(), q=Q)
+    with pytest.raises(DataUnavailable, match="coverage"):
+        strict.get_bars("SPX", DAY, "5m")
+    lenient = ParityUnderlyingProvider(
+        lambda s, d: quotes, config=EngineConfig.default(), q=Q, min_coverage=0.3
+    )
+    bars = lenient.get_bars("SPX", DAY, "5m")
+    assert bars.source is DataSource.PARITY and len(bars.frame) == 78
 
 
 def test_parity_provider_empty_quotes_raises():
