@@ -163,8 +163,8 @@ net of modelled costs. Comparing {n_trials} strategies is {n_trials} trials, so 
 Deflated Sharpe already carries that multiple-testing penalty (Bailey &amp;
 L&oacute;pez de Prado). Highlighting = highest annualised Sharpe, which is NOT the
 same as a demonstrated edge. The t-stat / PSR / DSR assume serially-independent daily
-PnL (autocorrelation biases them upward); the bootstrap Sharpe CI is the robust
-counterweight. No broker orders; renders fully offline.
+PnL (autocorrelation biases them upward); the bootstrap Sharpe CI is robust to
+short-range serial dependence (the counterweight). No broker orders; renders fully offline.
 </p>"""
     return document(title, body)
 

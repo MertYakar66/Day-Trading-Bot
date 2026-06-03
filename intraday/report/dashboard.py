@@ -57,16 +57,21 @@ def _chart_money(v: float) -> str:
     matching the KPI/:func:`_signed_money` convention. Without this, a chart's
     default ``f"${v:,.0f}"`` renders '$-6,169' while the KPIs render '−$6,169' for
     the very same number, on the same page. No '+' on positives (axis ticks would be
-    noisy); deterministic (no locale)."""
-    return ("−$" if v < 0 else "$") + f"{abs(v):,.0f}"
+    noisy); deterministic (no locale). Non-finite renders as an em-dash (insurance —
+    every current call site already drops/zeroes non-finite). The minus is gated at
+    ``v <= -0.5`` so a sub-dollar magnitude that rounds to 0 is never shown as '−$0'."""
+    if not math.isfinite(v):
+        return "—"
+    return ("−$" if v <= -0.5 else "$") + f"{abs(v):,.0f}"
 
 
-# The multiple-testing budget the honest full-universe evaluation searches
-# (3 underlying-only strategies × the 24-symbol cross-section = 72 trials; see
-# scripts/eval_real_universe.py). A single-strategy report can run with n_trials as
-# low as 1, where a green EDGE is conditional on a far smaller search than the
-# headline run — the verdict band says so. Reference value; update if the documented
-# universe changes.
+# The documented MAXIMUM multiple-testing budget the honest full-universe evaluation
+# searches (3 underlying-only strategies × the 24-symbol cross-section = up to 72
+# trials; see scripts/eval_real_universe.py — the actual count is data-dependent, as
+# only strategy×symbol combos with >= 2 days become trials). A single-strategy report
+# can run with n_trials as low as 1, where a green EDGE is conditional on a far
+# smaller search than the headline run — the verdict band says so. Reference value;
+# update if the documented universe changes.
 _FULL_UNIVERSE_TRIALS = 72
 
 
@@ -133,8 +138,9 @@ def _verdict_band(ev: StrategyEval) -> str:
         # manufacture a positive verdict — disclose the search budget it is conditional on.
         caveat = (
             f" Conditional on only {ev.n_trials} trial(s): the honest full-universe "
-            f"search spans {_FULL_UNIVERSE_TRIALS} strategy&times;symbol trials "
-            "(scripts/eval_real_universe.py), which would deflate this further."
+            f"search spans up to {_FULL_UNIVERSE_TRIALS} strategy&times;symbol trials "
+            "(data-dependent; scripts/eval_real_universe.py), which would deflate this "
+            "further."
             if ev.n_trials < _FULL_UNIVERSE_TRIALS else ""
         )
         return (
@@ -236,8 +242,8 @@ def _scorecard(ev: StrategyEval) -> str:
         '<p class="muted">The t-stat, P(true Sharpe&gt;0) and Deflated Sharpe assume '
         "serially-independent daily PnL; positive day-to-day autocorrelation biases "
         "them upward (overstating significance). The 95% Sharpe CI uses a stationary "
-        "block bootstrap, which IS autocorrelation-robust &mdash; read it as the "
-        "counterweight.</p>"
+        "block bootstrap, which is robust to short-range serial dependence &mdash; "
+        "read it as the counterweight.</p>"
     )
     return (
         '<table class="scorecard"><thead><tr><th>Metric</th><th>Value</th>'

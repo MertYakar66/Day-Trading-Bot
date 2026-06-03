@@ -520,6 +520,9 @@ def test_chart_money_puts_sign_before_dollar():
     assert dash._chart_money(-6169.0) == "−$6,169"   # minus BEFORE the $
     assert dash._chart_money(6169.0) == "$6,169"          # no '+' on positives
     assert dash._chart_money(0.0) == "$0"
+    assert dash._chart_money(-0.4) == "$0"                # sub-dollar: no misleading '−$0'
+    assert dash._chart_money(float("nan")) == "—"         # non-finite insurance
+    assert dash._chart_money(float("inf")) == "—"
 
 
 def test_dashboard_never_renders_dollar_dash(bt_result):
@@ -551,4 +554,5 @@ def test_small_n_trials_edge_carries_caveat():
 def test_scorecard_discloses_iid_assumption(bt_result):
     html = build_dashboard(bt_result, generated_at=GEN)
     assert "serially-independent" in html
-    assert "autocorrelation-robust" in html  # the bootstrap CI counterweight is named
+    # the bootstrap CI is named as the counterweight, qualified as short-range
+    assert "short-range serial dependence" in html
