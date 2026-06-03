@@ -117,7 +117,8 @@ def render_comparison(
     n_trials = entries[0]["ev"].n_trials
 
     chart = svg.multi_line_chart(
-        series, baseline=0.0, labels=dates, value_fmt=lambda v: f"{v:.1%}"
+        series, baseline=0.0, labels=dates, value_fmt=lambda v: f"{v:.1%}",
+        title="Strategy cumulative % return (net of costs)",
     )
 
     if insufficient:

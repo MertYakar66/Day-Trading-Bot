@@ -567,3 +567,42 @@ def test_summary_one_day_verdict_is_insufficient_data():
     s = build_summary(one, n_trials=1)
     assert s["eval"]["n_days"] < 2
     assert s["verdict"] == "INSUFFICIENT_DATA"
+
+
+# --------------------------------------------------------------------------- #
+# Accessibility: inline-SVG charts carry an accessible name (role=img + <title>)
+# --------------------------------------------------------------------------- #
+def test_svg_charts_carry_accessible_name():
+    out = svg.line_chart([1.0, 2.0, 3.0], title="Equity curve")
+    assert 'role="img"' in out
+    assert 'aria-label="Equity curve"' in out
+    assert "<title>Equity curve</title>" in out
+
+
+def test_svg_accessible_name_is_escaped():
+    out = svg.bar_chart([1.0, -2.0], title="<b>x</b>")
+    assert "<b>x</b>" not in out
+    assert "&lt;b&gt;x&lt;/b&gt;" in out
+
+
+def test_svg_empty_chart_uses_title_or_message_as_name():
+    titled = svg.line_chart([], title="Equity curve")   # degenerate -> empty, still named
+    assert "<title>Equity curve</title>" in titled
+    bare = svg.line_chart([])                            # no title -> the 'no data' message names it
+    assert "<title>no data</title>" in bare
+
+
+def test_svg_without_title_adds_no_aria(bt_result):
+    # No title => no aria-label/title element (behaviour unchanged for untitled charts).
+    out = svg.line_chart([1.0, 2.0, 3.0])
+    assert "aria-label" not in out and "<title>" not in out
+
+
+def test_dashboard_charts_have_accessible_names(bt_result):
+    html = build_dashboard(bt_result, generated_at=GEN)
+    for name in ("Net equity curve over the backtest window",
+                 "Underwater drawdown (fraction below the running peak)",
+                 "Daily net PnL by trading day",
+                 "Cost attribution: gross PnL minus costs equals net PnL"):
+        assert f"<title>{name}</title>" in html
+    _assert_offline(html)

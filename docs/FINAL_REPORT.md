@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-02 (results) · 2026-06-03 (launch-readiness refresh) · **Status:** Phase 0 + Phase 1 complete; real-data path wired
 (IBKR + Yahoo underlying); powered, multiple-testing-honest real-data evaluation
-run. 523 tests passing (lint + type-checked; v0.1.0 launch-readiness pass). · **Verdict: on 24 symbols × 59 real 5-min sessions, net of
+run. 528 tests passing (lint + type-checked; v0.1.0 launch-readiness pass). · **Verdict: on 24 symbols × 59 real 5-min sessions, net of
 costs, NO underlying-only strategy (reversion/breakout/momentum) shows an edge —
 all deflated-Sharpe ≈ 0, OOS fails. The engine reports the truth, not a fabricated
 edge.** See §0.

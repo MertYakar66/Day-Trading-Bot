@@ -1,7 +1,7 @@
 # Day-Trading-Bot — build backlog
 
 > **Status (2026-06-03): Phase 0 + Phase 1 COMPLETE and green** (synthetic + a wired
-> real-data path; 523 tests, lint + type-checked — see `PROGRESS.md` / `CHANGELOG.md`).
+> real-data path; 528 tests, lint + type-checked — see `PROGRESS.md` / `CHANGELOG.md`).
 > Phase 1 tasks T1.1–T1.3 below are done (`[x]`). Run the engine with
 > `python -m intraday backtest --start 2026-05-01 --end 2026-05-29`.
 

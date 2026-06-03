@@ -265,6 +265,7 @@ def _cost_attribution(m: MetricsReport) -> str:
             ("net", m.net_pnl, "total"),
         ],
         value_fmt=_chart_money,
+        title="Cost attribution: gross PnL minus costs equals net PnL",
     )
     facts = (
         '<ul class="facts">'
@@ -362,7 +363,8 @@ def _rolling_sharpe_section(
     roll = _rolling_sharpe(daily_vals, window)
     roll_dates = list(daily_dates)[window - 1:]
     chart = svg.line_chart(roll, baseline=0.0, labels=roll_dates,
-                           value_fmt=lambda v: f"{v:.2f}")
+                           value_fmt=lambda v: f"{v:.2f}",
+                           title=f"Rolling {window}-day annualised Sharpe")
     return (
         '<section class="card">'
         f"<h2>Rolling Sharpe ({window}-day, annualised net)</h2>"
@@ -401,7 +403,7 @@ def _per_symbol_section(result: BacktestResult) -> str:
     if not names:
         return ""
     chart = svg.bar_chart([agg[s]["net"] for s in names], labels=names,
-                          value_fmt=_chart_money)
+                          value_fmt=_chart_money, title="Net PnL by symbol")
     head = ("<tr><th>symbol</th><th>net</th><th>gross</th><th>costs</th>"
             "<th>trades</th><th>win%</th></tr>")
     rows = []
@@ -487,7 +489,8 @@ def _universe_section(universe: Mapping) -> str:
         parts.append("<h3>Per-symbol Sharpe (annualised, net)</h3>")
         parts.append(
             '<div class="scroll-x">'
-            + svg.heatmap(matrix, strat_names, symbols)
+            + svg.heatmap(matrix, strat_names, symbols,
+                          title="Per-symbol annualised Sharpe by strategy")
             + "</div>"
         )
 
@@ -537,10 +540,12 @@ def render_dashboard(
 
     equity_chart = svg.line_chart(
         equity, baseline=result.initial_capital, labels=dates,
-        value_fmt=_chart_money,
+        value_fmt=_chart_money, title="Net equity curve over the backtest window",
     )
-    dd_chart = svg.area_chart(dd, labels=dates, value_fmt=lambda v: f"{v:.1%}")
-    pnl_chart = svg.bar_chart(daily_vals, labels=daily_dates, value_fmt=_chart_money)
+    dd_chart = svg.area_chart(dd, labels=dates, value_fmt=lambda v: f"{v:.1%}",
+                              title="Underwater drawdown (fraction below the running peak)")
+    pnl_chart = svg.bar_chart(daily_vals, labels=daily_dates, value_fmt=_chart_money,
+                              title="Daily net PnL by trading day")
 
     universe_html = _universe_section(universe) if universe else ""
     rolling_html = _rolling_sharpe_section(daily_vals, daily_dates)

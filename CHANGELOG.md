@@ -7,7 +7,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Post-0.1.0 hardening from a second audit pass (no version bump yet; the **NO-EDGE
-headline is unchanged**). Tests 487 → 523.
+headline is unchanged**). Tests 487 → 528.
 
 ### Fixed
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules
@@ -42,6 +42,8 @@ headline is unchanged**). Tests 487 → 523.
 - **Network-free is now enforced, not assumed**: an autouse test fixture blocks
   outbound sockets, so the engine's "never connects" promise fails the suite loudly
   if any test ever reaches the network (opt out with `@pytest.mark.allow_network`).
+- **Report accessibility**: every inline-SVG chart now carries an accessible name
+  (`aria-label` + `<title>`) so the offline reports are navigable by screen readers.
 
 ### Changed
 - `doctor` verifies the core scientific stack (numpy/pandas/scipy/pyarrow); duplicate

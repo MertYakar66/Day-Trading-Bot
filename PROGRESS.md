@@ -514,12 +514,12 @@ to open-source (see `LICENSE` / `CHANGELOG.md`).
 
 ---
 
-## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#23)
+## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#24)
 
 A second audit→fix→adversarial-review pass after a fresh 10-dimension audit of the
 already-launch-ready engine. The audit found one outright shipping defect plus a
 cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
-**487 → 523**.
+**487 → 528**.
 
 - **#16 packaging (the real bug)** — `[tool.setuptools] packages = ["intraday"]`
   shipped only the 10 top-level modules and DROPPED every subpackage, so a clean
@@ -565,6 +565,11 @@ cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
   `@pytest.mark.allow_network`. Dropped the unused `requests` dep (only stdlib urllib
   is used). Reworded `eval_real_universe`'s verdict line so DSR>=0.95 reads as the
   formal criterion and OOS/t as corroborating (matching every other surface). (+2 tests)
+- **#24 report accessibility** — every inline-SVG chart already had `role="img"` but
+  no accessible NAME (a screen reader announced a bare "image"); added an `aria-label`
+  + `<title>` (threaded a `title` kwarg through the svg primitives, set at the
+  dashboard/comparison call sites). Purely additive — no logic, honesty-path, or engine
+  change. (+5 tests)
 
 Process note: each substantive PR's diff was adversarially re-reviewed (a 3-agent
 skeptical panel verified PR #17/#18 — guardrails confirmed intact, two wording nits
