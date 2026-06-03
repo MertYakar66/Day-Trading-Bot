@@ -26,11 +26,12 @@ from .data.store_provider import StoreBackedProvider
 from .data.synthetic import SyntheticDataProvider
 from .logging_config import get_logger
 from .metrics import build_report
-from .signals.s1_gamma_regime import S1GammaRegime
-from .signals.s2_zerodte_vrp import S2ZeroDteVrp
-from .signals.s3_vwap_orb import S3VwapOrb
-from .signals.s4_orb_breakout import S4OpeningRangeBreakout
-from .signals.s5_vwap_momentum import S5VwapMomentum
+from .signals.registry import (
+    STRATEGIES,
+    STRATEGY_KEYS,
+    UnknownStrategyError,
+    build_strategies,
+)
 
 logger = get_logger("intraday.cli")
 
@@ -59,21 +60,11 @@ def _build_provider(args, cfg: EngineConfig, symbols: list[str]):
 
 
 def _build_strategies(names: list[str], edge: float, entry_z: float, stop_k: float):
-    built = []
-    for n in names:
-        if n == "s1":
-            built.append(S1GammaRegime(edge=edge))
-        elif n == "s2":
-            built.append(S2ZeroDteVrp())
-        elif n == "s3":
-            built.append(S3VwapOrb(entry_z=entry_z, stop_k=stop_k, edge=edge))
-        elif n == "s4":
-            built.append(S4OpeningRangeBreakout(edge=edge))
-        elif n == "s5":
-            built.append(S5VwapMomentum(entry_z=entry_z, stop_k=stop_k, edge=edge))
-        else:
-            raise SystemExit(f"unknown strategy {n!r} (choose from s1..s5)")
-    return built
+    """Build strategies from the shared registry (the single source of truth)."""
+    try:
+        return build_strategies(names, edge=edge, entry_z=entry_z, stop_k=stop_k)
+    except UnknownStrategyError as e:  # pragma: no cover - argparse 'choices' guards first
+        raise SystemExit(str(e))
 
 
 def _build_config(nav: float | None) -> EngineConfig:
@@ -244,6 +235,109 @@ def cmd_report_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_version(args: argparse.Namespace) -> int:
+    """Print the engine and Python versions."""
+    import platform
+
+    from . import __version__
+
+    print(f"intraday-engine {__version__}")
+    print(f"python {platform.python_version()} ({platform.system()} {platform.machine()})")
+    return 0
+
+
+def cmd_strategies(args: argparse.Namespace) -> int:
+    """List the available strategies (the registry — single source of truth)."""
+    print("Available strategies (use with --strategy):\n")
+    for key in STRATEGY_KEYS:
+        info = STRATEGIES[key]
+        opt = "options" if info.needs_options else "underlying-only"
+        print(f"  {key}  {info.title}  [{opt}]")
+        print(f"      {info.summary}")
+    print(
+        "\nAll strategies sit behind ONE net-of-cost expectancy gate; --edge sets the\n"
+        "explicit edge over the gambler's-ruin fair baseline (0.0 => gate refuses all)."
+    )
+    return 0
+
+
+def _scan_store(root: Path) -> tuple[bool, int, int]:
+    """(exists, n_symbols, n_session_partitions) for a parquet store root, by
+    inspecting the on-disk bars/ticker=*/date=* partitions. No network, no provider."""
+    bars = root / "bars"
+    if not bars.is_dir():
+        return (root.is_dir(), 0, 0)
+    symbols = [p for p in bars.glob("ticker=*") if p.is_dir()]
+    # Count only real partition DIRECTORIES (mirror the symbol filter) so a stray
+    # file named date=* can't be reported as an available session partition.
+    sessions = sum(1 for p in bars.glob("ticker=*/date=*") if p.is_dir())
+    return (True, len(symbols), sessions)
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Environment health check (paper-only; never probes Theta, a broker, or any
+    network). Verifies the interpreter, the read-only SWE dependency, and what data
+    is available for offline replay, then prints a concise report."""
+    import sys
+
+    ok = True
+    lines = [
+        "intraday doctor - environment health",
+        "(paper-only; this never connects to Theta, a broker, or any network)",
+        "=" * 64,
+    ]
+
+    # 1) Python
+    vi = sys.version_info
+    py_ok = (vi.major, vi.minor) >= (3, 11)
+    ok = ok and py_ok
+    lines.append(
+        f" [{'ok ' if py_ok else 'FAIL'}] Python {vi.major}.{vi.minor}.{vi.micro} "
+        "(>= 3.11 required)"
+    )
+
+    # 2) SWE dependency (read-only) — importing only defines classes, no socket.
+    try:
+        import engine.transaction_costs  # noqa: F401
+        import backtests.simulator  # noqa: F401
+        lines.append(" [ok ] vendor/swe importable (engine.*, backtests.simulator)")
+    except Exception as e:
+        ok = False
+        lines.append(f" [FAIL] vendor/swe NOT importable: {e}")
+        lines.append("        -> git submodule update --init --recursive")
+
+    # 3) Data availability for offline replay (synthetic always works).
+    lines.append("-" * 64)
+    lines.append(" data for offline replay (synthetic provider always available):")
+    roots = [Path(args.store_root)] if args.store_root else [
+        Path("data_store"), Path("data_raw/store_yahoo"), Path("data_raw/store_ibkr"),
+    ]
+    any_data = False
+    for root in roots:
+        if root.exists() and not root.is_dir():
+            lines.append(f" [warn] {root} : is a file, not a store directory")
+            continue
+        exists, n_sym, n_sess = _scan_store(root)
+        if exists and n_sess:
+            any_data = True
+            lines.append(f" [ok ] {root}/ : {n_sym} symbol(s), {n_sess} session partition(s)")
+        elif exists:
+            lines.append(f" [warn] {root}/ : present but no bar partitions yet")
+        else:
+            lines.append(f" [ -- ] {root}/ : not found")
+    if not any_data:
+        lines.append(
+            "        no ingested real data found - that's fine; synthetic runs work.\n"
+            "        For real data see docs/REAL_DATA.md (free Yahoo path needs no Theta)."
+        )
+
+    lines.append("=" * 64)
+    lines.append(" try:  python -m intraday backtest --start 2026-05-01 --end 2026-05-29")
+    lines.append(f" status: {'all critical checks passed' if ok else 'CRITICAL CHECK FAILED (see above)'}")
+    print("\n".join(lines))
+    return 0 if ok else 1
+
+
 def _add_run_args(sp: argparse.ArgumentParser) -> None:
     """Arguments shared by every subcommand that runs the engine (backtest/report)."""
     sp.add_argument("--start", type=date.fromisoformat, default=date(2026, 5, 1))
@@ -261,22 +355,35 @@ def _add_run_args(sp: argparse.ArgumentParser) -> None:
     sp.add_argument("--store-root", dest="store_root", default="data_store",
                     help="parquet store root for --provider *-store (default: data_store)")
     sp.add_argument(
-        "--strategy", nargs="+", default=["s3"], choices=["s1", "s2", "s3", "s4", "s5"],
-        help="strategies (default s3). s1/s2 load option features (slower); "
-             "s3=VWAP reversion, s4=ORB breakout, s5=VWAP momentum (underlying-only).",
+        "--strategy", nargs="+", default=["s3"], choices=list(STRATEGY_KEYS),
+        metavar="STRAT",
+        help="strategies to run (default s3). s1/s2 load option features (slower); "
+             "s3/s4/s5 are underlying-only. Run 'intraday strategies' for the full list.",
     )
     sp.add_argument("--nav", type=float, default=None, help="paper NAV (assumption)")
     sp.add_argument("--entry-z", dest="entry_z", type=float, default=2.0)
     sp.add_argument("--stop-k", dest="stop_k", type=float, default=1.0)
     sp.add_argument(
         "--edge", dest="edge", type=float, default=0.10,
-        help="S3 mean-reversion edge over the gambler's-ruin fair baseline "
-             "(0.0 = no edge → gate refuses all trades)",
+        help="explicit edge over the gambler's-ruin fair baseline "
+             "(0.0 = no edge -> gate refuses all trades)",
     )
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="intraday", description="Intraday engine (paper-only).")
+    from . import __version__
+
+    p = argparse.ArgumentParser(
+        prog="intraday",
+        description=(
+            "Intraday day-trading decision engine (PAPER ONLY; never trades live). "
+            "Quickstart: intraday backtest --start 2026-05-01 --end 2026-05-29  |  "
+            "check setup: intraday doctor  |  list strategies: intraday strategies"
+        ),
+        epilog="All data is SYNTHETIC unless a --provider *-store replays ingested real "
+               "data. No broker, no Theta access. See README.md and docs/REAL_DATA.md.",
+    )
+    p.add_argument("--version", action="version", version=f"intraday-engine {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     bt = sub.add_parser("backtest", help="Run the Phase-0 backtest and print metrics.")
@@ -293,7 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_args(rp)
     rp.add_argument("--out", default="dashboard.html",
                     help="output HTML path (default: dashboard.html)")
-    rp.add_argument("--title", default="Intraday engine — backtest dashboard")
+    rp.add_argument("--title", default="Intraday engine - backtest dashboard")
     rp.add_argument("--n-trials", dest="n_trials", type=int, default=None,
                     help="deflated-Sharpe trial count (default: number of strategies run)")
     rp.add_argument("--universe-json", dest="universe_json", default=None,
@@ -310,7 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_args(cp)
     cp.set_defaults(strategy=["s3", "s4", "s5"])  # comparison is most useful multi-strategy
     cp.add_argument("--out", default="compare.html", help="output HTML path (default: compare.html)")
-    cp.add_argument("--title", default="Intraday engine — strategy comparison")
+    cp.add_argument("--title", default="Intraday engine - strategy comparison")
     cp.add_argument("--emit-json", dest="emit_json", default=None,
                     help="also write a per-strategy summary JSON array to this path")
     cp.add_argument("--open", action="store_true", help="open the comparison in a browser after writing")
@@ -322,9 +429,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ix.add_argument("--dir", required=True, help="directory of *.html reports to index")
     ix.add_argument("--out", default=None, help="output path (default: <dir>/index.html)")
-    ix.add_argument("--title", default="Intraday engine — report index")
+    ix.add_argument("--title", default="Intraday engine - report index")
     ix.add_argument("--open", action="store_true", help="open the index in a browser after writing")
     ix.set_defaults(func=cmd_report_index)
+
+    vp = sub.add_parser("version", help="Print the engine and Python versions.")
+    vp.set_defaults(func=cmd_version)
+
+    stp = sub.add_parser("strategies", help="List the available strategies and what they do.")
+    stp.set_defaults(func=cmd_strategies)
+
+    dp = sub.add_parser(
+        "doctor",
+        help="Check the environment (Python, vendor/swe, available data). Never probes Theta.",
+    )
+    dp.add_argument("--store-root", dest="store_root", default=None,
+                    help="check this parquet store root specifically (default: scan common roots)")
+    dp.set_defaults(func=cmd_doctor)
     return p
 
 
