@@ -31,7 +31,7 @@ from html import escape
 
 from ..backtest.engine import BacktestResult
 from ..eval import daily_pnl_from_result, evaluate_result
-from ..eval.stats import StrategyEval
+from ..eval.stats import INSUFFICIENT_DATA_MIN_DAYS, StrategyEval
 from ..metrics import MetricsReport, build_report
 from . import svg
 from .theme import document
@@ -125,7 +125,7 @@ def _banner(result: BacktestResult) -> str:
 def _verdict_band(ev: StrategyEval) -> str:
     # No / too-little data is NOT a 'no edge' finding — render it distinctly so a
     # zero- or one-day run can never read as the product's scientific verdict.
-    if ev.n_days < 2:
+    if ev.n_days < INSUFFICIENT_DATA_MIN_DAYS:
         return (
             '<div class="verdict verdict--nodata"><span class="verdict__tag">'
             "INSUFFICIENT DATA</span><span class=\"verdict__detail\">Only "
@@ -230,7 +230,7 @@ def _scorecard(ev: StrategyEval) -> str:
         f'<td class="sc__note">{note}</td></tr>'
         for name, val, note in rows
     )
-    if ev.n_days < 2:
+    if ev.n_days < INSUFFICIENT_DATA_MIN_DAYS:
         verdict, vcls = "insufficient data", ""
     else:
         verdict = "EDGE" if ev.significant else "NO demonstrated edge"

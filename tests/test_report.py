@@ -556,3 +556,14 @@ def test_scorecard_discloses_iid_assumption(bt_result):
     assert "serially-independent" in html
     # the bootstrap CI is named as the counterweight, qualified as short-range
     assert "short-range serial dependence" in html
+
+
+def test_summary_one_day_verdict_is_insufficient_data():
+    """JSON export agrees with the dashboard/CLI: a 1-day run is INSUFFICIENT_DATA,
+    not a definitive NO_EDGE (the verdict label is centralized in eval.edge_verdict)."""
+    from intraday.report import build_summary
+
+    one = _quick_run(["SPY"], date(2026, 5, 4), date(2026, 5, 4))  # one trading day
+    s = build_summary(one, n_trials=1)
+    assert s["eval"]["n_days"] < 2
+    assert s["verdict"] == "INSUFFICIENT_DATA"

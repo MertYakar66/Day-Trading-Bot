@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 
 from ..backtest.engine import BacktestResult
 from ..eval import evaluate_result
+from ..eval.stats import INSUFFICIENT_DATA_MIN_DAYS
 from ..metrics import build_report
 from . import svg
 from .dashboard import _banner, _cls, _esc, _fnum, _signed_money
@@ -102,7 +103,7 @@ def render_comparison(
     )
 
     any_edge = any(e["ev"].significant for e in entries)
-    insufficient = all(e["ev"].n_days < 2 for e in entries)
+    insufficient = all(e["ev"].n_days < INSUFFICIENT_DATA_MIN_DAYS for e in entries)
     rm = run_meta or {}
     first = entries[0]["result"]
     meta_bits = [

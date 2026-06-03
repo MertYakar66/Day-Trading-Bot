@@ -40,6 +40,13 @@ _EULER_GAMMA = 0.5772156649015329
 # number scattered across modules.
 DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD = 0.95
 
+# Below this many trading days a daily series is too short to judge an edge at all:
+# the statistics degenerate (evaluate_daily_pnl hard-returns significant=False with a
+# NaN DSR for n < 2). Such a run is INSUFFICIENT DATA, NOT a 'no edge' finding — every
+# verdict surface (CLI scorecard, JSON export, HTML dashboard/comparison) keys off this
+# one constant so the three-state verdict stays in lockstep.
+INSUFFICIENT_DATA_MIN_DAYS = 2
+
 
 def daily_pnl_from_result(result) -> pd.Series:
     """Portfolio daily PnL ($) from a BacktestResult's equity curve.
@@ -275,3 +282,20 @@ def evaluate_daily_pnl(
             if math.isfinite(dsr) else False
         ),
     )
+
+
+def edge_verdict(ev: StrategyEval) -> str:
+    """The three-state verdict label, consistent across every surface (CLI scorecard,
+    JSON export, HTML dashboard/comparison):
+
+    - ``"INSUFFICIENT_DATA"`` when the series is too short to judge an edge
+      (``n_days < INSUFFICIENT_DATA_MIN_DAYS``) — a non-finding, NOT a 'no edge' result;
+    - ``"EDGE"`` when the deflated Sharpe clears the bar (``ev.significant``);
+    - ``"NO_EDGE"`` otherwise.
+
+    Defined here, beside the threshold constants, so a short (e.g. 1-day) run can never
+    print a definitive verdict on one surface while another correctly abstains.
+    """
+    if ev.n_days < INSUFFICIENT_DATA_MIN_DAYS:
+        return "INSUFFICIENT_DATA"
+    return "EDGE" if ev.significant else "NO_EDGE"

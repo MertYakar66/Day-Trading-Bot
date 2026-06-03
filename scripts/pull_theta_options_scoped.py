@@ -96,13 +96,13 @@ def estimate(plan: list[PullItem]) -> dict:
 def _render_plan(scope: PullScope, plan: list[PullItem]) -> str:
     est = estimate(plan)
     head = [
-        "Scoped Theta OPTIONS pull — DRY RUN (no socket opened).",
+        "Scoped Theta OPTIONS pull - DRY RUN (no socket opened).",
         f"  symbols={list(scope.symbols)} window={scope.start}..{scope.end}",
-        f"  strikes=ATM±{scope.strikes_each_side} expiries={scope.expiries} "
+        f"  strikes=ATM+/-{scope.strikes_each_side} expiries={scope.expiries} "
         f"concurrency={scope.max_concurrency}",
         f"  pulls={est['pulls']}  ~{est['approx_disk_mb']} MB  "
         f"~{est['approx_minutes_at_4x']} min at {scope.max_concurrency}x",
-        "  (estimates are order-of-magnitude — measure day 1 and recalibrate)",
+        "  (estimates are order-of-magnitude - measure day 1 and recalibrate)",
         "",
         "First / last planned invocations:",
     ]

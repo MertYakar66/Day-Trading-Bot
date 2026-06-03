@@ -68,7 +68,7 @@ def ingest_dir(raw_dir: Path, store: ParquetStore, *, min_coverage: float) -> No
     for path in files:
         payload = json.loads(path.read_text())
         if not payload.get("time"):
-            logger.warning("%s: empty payload (error or no data) — skipping", path.name)
+            logger.warning("%s: empty payload (error or no data) - skipping", path.name)
             continue
         symbol, interval = _infer_symbol_interval(path, payload)
         contract = IBKR_CONTRACTS.get(symbol)
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         "--min-coverage", type=float, default=0.8,
         help="skip sessions below this fraction of the canonical grid. This is also "
              "the de-facto half-day guard (NYSE 13:00-ET early closes are ~54%% of a "
-             "full RTH grid) — do NOT lower below ~0.6 or you will admit half-days "
+             "full RTH grid) - do NOT lower below ~0.6 or you will admit half-days "
              "padded with a fabricated flat afternoon.",
     )
     args = p.parse_args(argv)
