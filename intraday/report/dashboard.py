@@ -52,6 +52,29 @@ def _signed_money(v: float) -> str:
     return ("+" if v >= 0 else "−") + _money(abs(v))
 
 
+def _chart_money(v: float) -> str:
+    """Currency for CHART labels: the minus sign goes BEFORE the '$' ('−$6,169'),
+    matching the KPI/:func:`_signed_money` convention. Without this, a chart's
+    default ``f"${v:,.0f}"`` renders '$-6,169' while the KPIs render '−$6,169' for
+    the very same number, on the same page. No '+' on positives (axis ticks would be
+    noisy); deterministic (no locale). Non-finite renders as an em-dash (insurance —
+    every current call site already drops/zeroes non-finite). The minus is gated at
+    ``v <= -0.5`` so a sub-dollar magnitude that rounds to 0 is never shown as '−$0'."""
+    if not math.isfinite(v):
+        return "—"
+    return ("−$" if v <= -0.5 else "$") + f"{abs(v):,.0f}"
+
+
+# The documented MAXIMUM multiple-testing budget the honest full-universe evaluation
+# searches (3 underlying-only strategies × the 24-symbol cross-section = up to 72
+# trials; see scripts/eval_real_universe.py — the actual count is data-dependent, as
+# only strategy×symbol combos with >= 2 days become trials). A single-strategy report
+# can run with n_trials as low as 1, where a green EDGE is conditional on a far
+# smaller search than the headline run — the verdict band says so. Reference value;
+# update if the documented universe changes.
+_FULL_UNIVERSE_TRIALS = 72
+
+
 def _cls(v: float) -> str:
     return "pos" if v >= 0 else "neg"
 
@@ -100,13 +123,31 @@ def _banner(result: BacktestResult) -> str:
 
 
 def _verdict_band(ev: StrategyEval) -> str:
+    # No / too-little data is NOT a 'no edge' finding — render it distinctly so a
+    # zero- or one-day run can never read as the product's scientific verdict.
+    if ev.n_days < 2:
+        return (
+            '<div class="verdict verdict--nodata"><span class="verdict__tag">'
+            "INSUFFICIENT DATA</span><span class=\"verdict__detail\">Only "
+            f"{ev.n_days} trading day(s) evaluated &mdash; too few to judge an edge. "
+            "This is a NO-DATA condition, not a 'no demonstrated edge' result.</span></div>"
+        )
     dsr = _fnum(ev.deflated_sharpe, "{:.3f}")
     if ev.significant:
+        # A green EDGE on few trials is the most plausible way to accidentally
+        # manufacture a positive verdict — disclose the search budget it is conditional on.
+        caveat = (
+            f" Conditional on only {ev.n_trials} trial(s): the honest full-universe "
+            f"search spans up to {_FULL_UNIVERSE_TRIALS} strategy&times;symbol trials "
+            "(data-dependent; scripts/eval_real_universe.py), which would deflate this "
+            "further."
+            if ev.n_trials < _FULL_UNIVERSE_TRIALS else ""
+        )
         return (
             '<div class="verdict verdict--edge"><span class="verdict__tag">EDGE '
             "(rare)</span><span class=\"verdict__detail\">Deflated Sharpe "
             f"{dsr} &ge; 0.95 across {ev.n_trials} trial(s) &mdash; "
-            "survives the multiple-testing penalty.</span></div>"
+            f"survives the multiple-testing penalty.{caveat}</span></div>"
         )
     return (
         '<div class="verdict verdict--noedge"><span class="verdict__tag">NO '
@@ -189,8 +230,21 @@ def _scorecard(ev: StrategyEval) -> str:
         f'<td class="sc__note">{note}</td></tr>'
         for name, val, note in rows
     )
-    verdict = "EDGE" if ev.significant else "NO demonstrated edge"
-    vcls = "pos" if ev.significant else "neg"
+    if ev.n_days < 2:
+        verdict, vcls = "insufficient data", ""
+    else:
+        verdict = "EDGE" if ev.significant else "NO demonstrated edge"
+        vcls = "pos" if ev.significant else "neg"
+    # Honest disclosure: the parametric statistics assume serially-independent days;
+    # the bootstrap CI is the autocorrelation-robust counterweight (it does not drive
+    # the verdict). See intraday.eval.stats.
+    iid_note = (
+        '<p class="muted">The t-stat, P(true Sharpe&gt;0) and Deflated Sharpe assume '
+        "serially-independent daily PnL; positive day-to-day autocorrelation biases "
+        "them upward (overstating significance). The 95% Sharpe CI uses a stationary "
+        "block bootstrap, which is robust to short-range serial dependence &mdash; "
+        "read it as the counterweight.</p>"
+    )
     return (
         '<table class="scorecard"><thead><tr><th>Metric</th><th>Value</th>'
         "<th>What it means</th></tr></thead><tbody>"
@@ -199,6 +253,7 @@ def _scorecard(ev: StrategyEval) -> str:
         f'<td class="sc__val {vcls}">{verdict}</td>'
         '<td class="sc__note">the deflated Sharpe is the sole authority here</td></tr>'
         "</tbody></table>"
+        + iid_note
     )
 
 
@@ -208,7 +263,8 @@ def _cost_attribution(m: MetricsReport) -> str:
             ("gross", m.gross_pnl, "total"),
             ("costs", -m.total_costs, "delta"),
             ("net", m.net_pnl, "total"),
-        ]
+        ],
+        value_fmt=_chart_money,
     )
     facts = (
         '<ul class="facts">'
@@ -345,7 +401,7 @@ def _per_symbol_section(result: BacktestResult) -> str:
     if not names:
         return ""
     chart = svg.bar_chart([agg[s]["net"] for s in names], labels=names,
-                          value_fmt=lambda v: f"${v:,.0f}")
+                          value_fmt=_chart_money)
     head = ("<tr><th>symbol</th><th>net</th><th>gross</th><th>costs</th>"
             "<th>trades</th><th>win%</th></tr>")
     rows = []
@@ -481,10 +537,10 @@ def render_dashboard(
 
     equity_chart = svg.line_chart(
         equity, baseline=result.initial_capital, labels=dates,
-        value_fmt=lambda v: f"${v:,.0f}",
+        value_fmt=_chart_money,
     )
     dd_chart = svg.area_chart(dd, labels=dates, value_fmt=lambda v: f"{v:.1%}")
-    pnl_chart = svg.bar_chart(daily_vals, labels=daily_dates, value_fmt=lambda v: f"${v:,.0f}")
+    pnl_chart = svg.bar_chart(daily_vals, labels=daily_dates, value_fmt=_chart_money)
 
     universe_html = _universe_section(universe) if universe else ""
     rolling_html = _rolling_sharpe_section(daily_vals, daily_dates)

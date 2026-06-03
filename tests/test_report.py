@@ -511,3 +511,48 @@ def test_empty_blotter_uses_empty_state():
     html = build_dashboard(none, generated_at=GEN)
     assert "empty-state" in html and "refused every signal" in html
     _assert_offline(html)
+
+
+# --------------------------------------------------------------------------- #
+# Round-2 audit: money-format consistency + honesty disclosures
+# --------------------------------------------------------------------------- #
+def test_chart_money_puts_sign_before_dollar():
+    assert dash._chart_money(-6169.0) == "−$6,169"   # minus BEFORE the $
+    assert dash._chart_money(6169.0) == "$6,169"          # no '+' on positives
+    assert dash._chart_money(0.0) == "$0"
+    assert dash._chart_money(-0.4) == "$0"                # sub-dollar: no misleading '−$0'
+    assert dash._chart_money(float("nan")) == "—"         # non-finite insurance
+    assert dash._chart_money(float("inf")) == "—"
+
+
+def test_dashboard_never_renders_dollar_dash(bt_result):
+    """Regression for the '$-6,169' (chart) vs '−$6,169' (KPI) inconsistency: charts
+    now use _chart_money, so Python's default minus-after-dollar form never appears."""
+    html = build_dashboard(bt_result, generated_at=GEN)
+    assert "$-" not in html
+
+
+def test_insufficient_data_verdict_is_distinct_from_no_edge():
+    """A zero/one-day run must read as INSUFFICIENT DATA, never as 'no edge'."""
+    band = dash._verdict_band(_mk_eval(n_days=1, significant=False))
+    assert "INSUFFICIENT DATA" in band and "verdict--nodata" in band
+    assert "NO DEMONSTRATED EDGE" not in band
+    assert "insufficient data" in dash._scorecard(_mk_eval(n_days=0))
+    # a normal multi-day run is unaffected
+    assert "NO DEMONSTRATED EDGE" in dash._verdict_band(_mk_eval(n_days=200, significant=False))
+
+
+def test_small_n_trials_edge_carries_caveat():
+    one = dash._verdict_band(_mk_eval(significant=True, n_trials=1, deflated_sharpe=0.97))
+    assert "EDGE (rare)" in one
+    assert "Conditional on only 1 trial" in one and "72" in one
+    # at/above the documented full-universe budget the caveat is suppressed
+    full = dash._verdict_band(_mk_eval(significant=True, n_trials=72, deflated_sharpe=0.97))
+    assert "EDGE (rare)" in full and "Conditional on only" not in full
+
+
+def test_scorecard_discloses_iid_assumption(bt_result):
+    html = build_dashboard(bt_result, generated_at=GEN)
+    assert "serially-independent" in html
+    # the bootstrap CI is named as the counterweight, qualified as short-range
+    assert "short-range serial dependence" in html

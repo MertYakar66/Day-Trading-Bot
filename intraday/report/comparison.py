@@ -102,6 +102,7 @@ def render_comparison(
     )
 
     any_edge = any(e["ev"].significant for e in entries)
+    insufficient = all(e["ev"].n_days < 2 for e in entries)
     rm = run_meta or {}
     first = entries[0]["result"]
     meta_bits = [
@@ -118,7 +119,14 @@ def render_comparison(
         series, baseline=0.0, labels=dates, value_fmt=lambda v: f"{v:.1%}"
     )
 
-    if any_edge:
+    if insufficient:
+        verdict = (
+            '<div class="verdict verdict--nodata"><span class="verdict__tag">'
+            "INSUFFICIENT DATA</span><span class=\"verdict__detail\">No strategy has "
+            "enough trading days to evaluate &mdash; a NO-DATA condition, not a "
+            "'no edge' result.</span></div>"
+        )
+    elif any_edge:
         verdict = (
             '<div class="verdict verdict--edge"><span class="verdict__tag">'
             "AT LEAST ONE EDGE</span><span class=\"verdict__detail\">A strategy "
@@ -154,7 +162,9 @@ Paper-only. Curves are cumulative % return from each strategy's starting capital
 net of modelled costs. Comparing {n_trials} strategies is {n_trials} trials, so each
 Deflated Sharpe already carries that multiple-testing penalty (Bailey &amp;
 L&oacute;pez de Prado). Highlighting = highest annualised Sharpe, which is NOT the
-same as a demonstrated edge. No broker orders; renders fully offline.
+same as a demonstrated edge. The t-stat / PSR / DSR assume serially-independent daily
+PnL (autocorrelation biases them upward); the bootstrap Sharpe CI is robust to
+short-range serial dependence (the counterweight). No broker orders; renders fully offline.
 </p>"""
     return document(title, body)
 

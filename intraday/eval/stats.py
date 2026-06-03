@@ -8,6 +8,18 @@ Multiple-testing: when you try ``N`` strategy/symbol combinations and report the
 best, its Sharpe is upward-biased. The Deflated Sharpe Ratio (Bailey &
 López de Prado, 2014) gives the probability the TRUE Sharpe exceeds 0 after
 discounting that selection over ``N`` trials and the series' non-normality.
+
+Serial-dependence caveat (read before trusting a verdict): the parametric
+statistics here — :func:`clustered_t_stat`, :func:`probabilistic_sharpe_ratio`,
+and hence :func:`deflated_sharpe_ratio` — assume the daily series is serially
+INDEPENDENT (i.i.d. across days). "Clustered" refers to collapsing intraday trades
+into their day, NOT to day-to-day autocorrelation. Positive serial correlation
+inflates the t-stat / PSR / DSR (the effective sample size is below ``n``). The one
+construct that IS autocorrelation-robust is :func:`stationary_bootstrap_ci` (it
+resamples blocks, preserving short-range dependence) — but it produces a CI, it does
+NOT drive the EDGE/NO-EDGE verdict. So read the bootstrap Sharpe CI as the honest
+counterweight to a parametric verdict, and treat a near-threshold DSR on a single,
+small-``n`` series with extra suspicion.
 """
 
 from __future__ import annotations
@@ -52,7 +64,10 @@ def clustered_t_stat(daily: pd.Series) -> tuple[float, float]:
     """One-sample t-stat (and two-sided p) of mean daily PnL vs 0.
 
     Each trading day is one observation (intraday trades are clustered into their
-    day), so this does not inflate significance by trade count.
+    day), so this does not inflate significance by trade count. It DOES assume the
+    days are serially independent: positive day-to-day autocorrelation inflates this
+    t-stat (the effective n is below ``len(daily)``). See the module docstring; the
+    stationary-bootstrap Sharpe CI is the autocorrelation-robust counterweight.
     """
     x = np.asarray(daily, dtype="float64")
     x = x[np.isfinite(x)]
@@ -124,6 +139,10 @@ def probabilistic_sharpe_ratio(
 
     ``sr_hat``/``sr_star`` are PER-OBSERVATION (daily) Sharpes; ``kurt`` is the
     non-excess kurtosis (normal = 3). Bailey & López de Prado (2012).
+
+    Assumes serially-independent observations (the ``sqrt(n - 1)`` scaling): positive
+    autocorrelation inflates PSR — and therefore the DSR that builds on it — because
+    the effective sample size is below ``n``. See the module docstring.
     """
     if n < 2:
         return float("nan")
