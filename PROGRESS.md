@@ -514,12 +514,12 @@ to open-source (see `LICENSE` / `CHANGELOG.md`).
 
 ---
 
-## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#24)
+## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#25)
 
 A second audit→fix→adversarial-review pass after a fresh 10-dimension audit of the
 already-launch-ready engine. The audit found one outright shipping defect plus a
 cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
-**487 → 528**.
+**487 → 529**.
 
 - **#16 packaging (the real bug)** — `[tool.setuptools] packages = ["intraday"]`
   shipped only the 10 top-level modules and DROPPED every subpackage, so a clean
@@ -570,6 +570,16 @@ cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
   + `<title>` (threaded a `title` kwarg through the svg primitives, set at the
   dashboard/comparison call sites). Purely additive — no logic, honesty-path, or engine
   change. (+5 tests)
+- **#25 RV hot-path trim (perf)** — the per-tick realized-vol call sliced a growing
+  session prefix (`iloc[:i+1]`); every SWE estimator is tail-only (`.tail(window)` /
+  `.tail(window+1)`), so the engine now passes only the last `window+1` bars — O(window)
+  not O(i) per tick (O(T·window) not O(T²) per session). PROVEN result-identical by a
+  full-prefix-vs-trimmed equality test across all five estimators at the window
+  boundary; the S1/S2/phase-1 suite is unchanged end-to-end. The companion OFI
+  `window_available_at` O(log N) searchsorted was DEFERRED: it needs the option tape
+  sorted by ts/available_ts (synthetic guarantees it, store-loaded tapes don't), a
+  silent-bug risk on the honesty path not worth a Theta-blocked gain — flag for the
+  operator if S1/S2 iteration speed becomes a constraint. (+1 test)
 
 Process note: each substantive PR's diff was adversarially re-reviewed (a 3-agent
 skeptical panel verified PR #17/#18 — guardrails confirmed intact, two wording nits

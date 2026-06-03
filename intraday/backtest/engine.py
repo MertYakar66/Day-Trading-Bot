@@ -385,9 +385,14 @@ class IntradayBacktester:
                     flip_dist = gs.flip_distance_pct
                     ncw, npw = gs.nearest_call_wall, gs.nearest_put_wall
             if self._needs_rv:
+                # Trailing window only: every SWE RV estimator uses just .tail(window)
+                # / .tail(window+1), so passing the last window+1 bars is identical to
+                # the full session prefix but turns the per-tick cost from O(i) into
+                # O(window) (O(T*window) over the session instead of O(T^2)).
+                rv_window = self.pipeline.rv_window
                 rv = intraday_rv(
-                    d["frame"].iloc[: i + 1], d["interval"],
-                    window=self.pipeline.rv_window, estimator=self.pipeline.rv_estimator,
+                    d["frame"].iloc[max(0, i - rv_window) : i + 1], d["interval"],
+                    window=rv_window, estimator=self.pipeline.rv_estimator,
                     session=self.config.session,
                 )
                 if rv is not None and atm_iv is not None:
