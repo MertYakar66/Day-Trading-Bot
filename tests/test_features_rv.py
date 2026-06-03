@@ -122,6 +122,25 @@ def test_intraday_rv_rescale_garman_klass(spy_bars):
     assert got == pytest.approx(expected, rel=1e-12)
 
 
+def test_intraday_rv_trailing_window_equals_full_prefix(spy_bars):
+    """The engine feeds the RV estimator the last ``window+1`` bars, not the full
+    session prefix, as an O(window) (not O(i)) per-tick optimization. That trim must
+    be RESULT-IDENTICAL — every SWE estimator is tail-only. This locks it: a future
+    SWE change that looked back further than window+1 would fail here rather than
+    silently alter the feature."""
+    frame = spy_bars.frame
+    window = 30
+    n = len(frame)
+    for estimator in ("close_to_close", "parkinson", "garman_klass",
+                      "rogers_satchell", "yang_zhang"):
+        for i in (0, 29, 30, 31, 60, n - 1):  # below / at / above the window boundary
+            full = intraday_rv(frame.iloc[: i + 1], "1m", window=window, estimator=estimator)
+            trimmed = intraday_rv(
+                frame.iloc[max(0, i - window) : i + 1], "1m", window=window, estimator=estimator
+            )
+            assert full == trimmed, f"{estimator} @ i={i}: full={full} trimmed={trimmed}"
+
+
 def test_intraday_rv_estimators_disagree_but_same_order(spy_bars):
     # Different estimators give distinct (but same-magnitude) annualized vols.
     gk = intraday_rv(spy_bars.frame, "1m", window=30, estimator="garman_klass")

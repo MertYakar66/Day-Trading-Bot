@@ -7,7 +7,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Post-0.1.0 hardening from a second audit pass (no version bump yet; the **NO-EDGE
-headline is unchanged**). Tests 487 → 528.
+headline is unchanged**). Tests 487 → 529.
 
 ### Fixed
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules
