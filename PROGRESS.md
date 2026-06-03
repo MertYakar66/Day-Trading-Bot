@@ -514,12 +514,12 @@ to open-source (see `LICENSE` / `CHANGELOG.md`).
 
 ---
 
-## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#22)
+## Session 2026-06-03 — launch-readiness round 2 (PRs #16–#23)
 
 A second audit→fix→adversarial-review pass after a fresh 10-dimension audit of the
 already-launch-ready engine. The audit found one outright shipping defect plus a
 cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
-**487 → 521**.
+**487 → 523**.
 
 - **#16 packaging (the real bug)** — `[tool.setuptools] packages = ["intraday"]`
   shipped only the 10 top-level modules and DROPPED every subpackage, so a clean
@@ -558,6 +558,13 @@ cluster of honesty/polish gaps; **the NO-EDGE headline is unchanged**. Tests
   Also: ASCII-hardened the operator scripts (live_paper_poll / fetch_yahoo /
   ingest_ibkr / pull_theta) for the cp1252 console; a parity above-floor ffill test;
   FINAL_REPORT date/symbol-session/notional wording. (+4 tests)
+- **#23 enforce network-free by construction** — an autouse `_block_network` conftest
+  fixture monkeypatches `socket.connect`/`create_connection` to raise, so the engine's
+  headline "never connects" promise is proven MECHANICALLY (the full suite passing
+  while the block is active is the proof), not trusted by convention; opt-out via
+  `@pytest.mark.allow_network`. Dropped the unused `requests` dep (only stdlib urllib
+  is used). Reworded `eval_real_universe`'s verdict line so DSR>=0.95 reads as the
+  formal criterion and OOS/t as corroborating (matching every other surface). (+2 tests)
 
 Process note: each substantive PR's diff was adversarially re-reviewed (a 3-agent
 skeptical panel verified PR #17/#18 — guardrails confirmed intact, two wording nits

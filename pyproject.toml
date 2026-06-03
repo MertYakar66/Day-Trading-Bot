@@ -78,6 +78,7 @@ markers = [
     "gate: asserts the expectancy gate / downgrade-only reviewer contract",
     "integration: full Phase-0 end-to-end replay",
     "swe: requires the vendor/swe dependency to import",
+    "allow_network: opt out of the autouse socket block (no test currently needs it)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
