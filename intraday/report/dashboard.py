@@ -25,6 +25,7 @@ Design rules that make this trustworthy and testable:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from html import escape
 
@@ -123,22 +124,43 @@ def _kpi(label: str, value: str, sub: str = "", *, cls: str = "") -> str:
     )
 
 
+def _signed_cls(v: float) -> str:
+    """Colour class for a directional value, plus the ``signed`` opt-in that adds a
+    non-chromatic up/down chevron (colour-blind aid) — only on values where a
+    positive/negative direction is meaningful (not costs / drawdown magnitudes).
+
+    A non-finite value (e.g. an infinite Calmar/Sortino, rendered as an em-dash by
+    :func:`_fnum`) gets no class at all, so no misleading chevron/colour is implied.
+    """
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return ""
+    if not math.isfinite(x):
+        return ""
+    return f"{_cls(x)} signed"
+
+
 def _kpi_grid(m: MetricsReport, ev: StrategyEval) -> str:
     cards = [
         _kpi("Net PnL", _signed_money(m.net_pnl), "after modelled costs",
-             cls=_cls(m.net_pnl)),
+             cls=_signed_cls(m.net_pnl)),
         _kpi("Gross PnL", _signed_money(m.gross_pnl), "before costs",
-             cls=_cls(m.gross_pnl)),
+             cls=_signed_cls(m.gross_pnl)),
         _kpi("Total costs", _money(m.total_costs),
              f"{m.cost_bps_of_notional:.1f} bps of notional", cls="neg"),
         _kpi("Sharpe (net, ann.)", f"{m.sharpe_ratio:.2f}",
              f"95% CI [{ev.sharpe_ann_ci_lo:.2f}, {ev.sharpe_ann_ci_hi:.2f}]",
-             cls=_cls(m.sharpe_ratio)),
+             cls=_signed_cls(m.sharpe_ratio)),
+        _kpi("Sortino (net, ann.)", _fnum(m.sortino_ratio), "downside volatility only",
+             cls=_signed_cls(m.sortino_ratio)),
         _kpi("Max drawdown", _pct(m.max_drawdown), "peak-to-trough (net equity)",
              cls="neg"),
+        _kpi("Calmar", _fnum(m.calmar_ratio), "ann. return / max drawdown",
+             cls=_signed_cls(m.calmar_ratio)),
         _kpi("Win rate", f"{m.win_rate:.1%}", f"{m.total_trades} trades"),
         _kpi("Expectancy / trade", _signed_money(m.expectancy_per_trade), "net $/trade",
-             cls=_cls(m.expectancy_per_trade)),
+             cls=_signed_cls(m.expectancy_per_trade)),
         _kpi("Trading days", f"{m.n_days}",
              f"NAV ${m.initial_capital:,.0f} → ${m.final_equity:,.0f}"),
     ]
@@ -204,7 +226,9 @@ def _trade_blotter(result: BacktestResult, *, limit: int = 200) -> str:
     trades = sorted(result.trades, key=lambda t: (str(t.entry_ts), t.symbol))
     total = len(trades)
     if total == 0:
-        return '<p class="muted">No trades were taken (the gate refused every signal).</p>'
+        return ('<div class="empty-state">No trades were taken &mdash; the net-of-cost '
+                "expectancy gate refused every signal. With no proven edge that is the "
+                "correct, honest outcome.</div>")
     shown = trades[:limit]
 
     def _ts(ts) -> str:
@@ -255,6 +279,95 @@ def _exit_reasons(m: MetricsReport) -> str:
             f'<span class="er__count">{count}</span></li>'
         )
     return '<ul class="exitreasons">' + "".join(bars) + "</ul>"
+
+
+_ROLL_WINDOW = 10
+
+
+def _rolling_sharpe(daily_vals: Sequence[float], window: int = _ROLL_WINDOW) -> list[float]:
+    """Trailing-``window`` annualised Sharpe at each day (one value per window)."""
+    from ..eval import annualized_sharpe
+
+    return [
+        annualized_sharpe(daily_vals[i - window + 1 : i + 1])
+        for i in range(window - 1, len(daily_vals))
+    ]
+
+
+def _rolling_sharpe_section(
+    daily_vals: Sequence[float], daily_dates: Sequence[str], window: int = _ROLL_WINDOW
+) -> str:
+    """Show how the (annualised) Sharpe holds up over the window — a decaying or
+    wildly swinging line is a red flag a single headline Sharpe would hide. Rendered
+    only when there are enough days for the rolling view to mean anything."""
+    if len(daily_vals) < window + 2:
+        return ""
+    roll = _rolling_sharpe(daily_vals, window)
+    roll_dates = list(daily_dates)[window - 1:]
+    chart = svg.line_chart(roll, baseline=0.0, labels=roll_dates,
+                           value_fmt=lambda v: f"{v:.2f}")
+    return (
+        '<section class="card">'
+        f"<h2>Rolling Sharpe ({window}-day, annualised net)</h2>"
+        f"{chart}"
+        '<p class="muted">Flat near zero is the honest expectation without an edge; a '
+        "persistently positive line is only a hint — the deflated-Sharpe verdict above "
+        "remains the authority.</p>"
+        "</section>"
+    )
+
+
+def _per_symbol_agg(result: BacktestResult) -> dict[str, dict]:
+    """Aggregate closed trades into per-symbol {net,gross,costs,n,wins}.
+
+    Pure and order-independent — extracted so the numbers can be unit-tested
+    directly (their net must sum to the book net, their counts to the trade count).
+    """
+    agg: dict[str, dict] = {}
+    for t in result.trades:
+        a = agg.setdefault(t.symbol, {"net": 0.0, "gross": 0.0, "costs": 0.0, "n": 0, "wins": 0})
+        a["net"] += t.net_pnl
+        a["gross"] += t.gross_pnl
+        a["costs"] += t.costs
+        a["n"] += 1
+        a["wins"] += 1 if t.net_pnl > 0 else 0
+    return agg
+
+
+def _per_symbol_section(result: BacktestResult) -> str:
+    """Per-symbol net/gross/costs/trades/win% breakdown (only for multi-symbol runs),
+    so a result driven by one name isn't mistaken for a broad effect."""
+    if len(result.symbols) <= 1 or not result.trades:
+        return ""
+    agg = _per_symbol_agg(result)
+    names = sorted(agg)  # deterministic ordering
+    if not names:
+        return ""
+    chart = svg.bar_chart([agg[s]["net"] for s in names], labels=names,
+                          value_fmt=lambda v: f"${v:,.0f}")
+    head = ("<tr><th>symbol</th><th>net</th><th>gross</th><th>costs</th>"
+            "<th>trades</th><th>win%</th></tr>")
+    rows = []
+    for s in names:
+        a = agg[s]
+        wr = (a["wins"] / a["n"]) if a["n"] else 0.0
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(s)}</td>"
+            f'<td class="num {_cls(a["net"])}">{_signed_money(a["net"])}</td>'
+            f'<td class="num {_cls(a["gross"])}">{_signed_money(a["gross"])}</td>'
+            f'<td class="num neg">{_money(a["costs"])}</td>'
+            f'<td class="num">{a["n"]}</td>'
+            f'<td class="num">{wr:.0%}</td>'
+            "</tr>"
+        )
+    table = ('<table class="psym"><thead>' + head + "</thead><tbody>"
+             + "".join(rows) + "</tbody></table>")
+    return (
+        '<section class="card"><h2>Per-symbol breakdown (net PnL by symbol)</h2>'
+        f"{chart}"
+        f'<div class="scroll-x">{table}</div></section>'
+    )
 
 
 def _universe_section(universe: Mapping) -> str:
@@ -373,6 +486,8 @@ def render_dashboard(
     pnl_chart = svg.bar_chart(daily_vals, labels=daily_dates, value_fmt=lambda v: f"${v:,.0f}")
 
     universe_html = _universe_section(universe) if universe else ""
+    rolling_html = _rolling_sharpe_section(daily_vals, daily_dates)
+    persym_html = _per_symbol_section(result)
 
     gen = _esc(generated_at) if generated_at else "—"
 
@@ -398,6 +513,8 @@ def render_dashboard(
 </section>
 </div>
 
+{rolling_html}
+
 <section class="card">
 <h2>Honesty scorecard</h2>
 {_scorecard(ev)}
@@ -412,6 +529,8 @@ def render_dashboard(
 <h2>Exit reasons</h2>
 {_exit_reasons(metrics) or '<p class="muted">No closed trades.</p>'}
 </section>
+
+{persym_html}
 
 {universe_html}
 

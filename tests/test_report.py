@@ -68,9 +68,12 @@ def test_dashboard_is_wellformed_offline_html(bt_result):
 
 def test_dashboard_has_one_svg_per_chart(bt_result):
     html = build_dashboard(bt_result, generated_at=GEN)
-    # equity + drawdown + daily-pnl + cost-waterfall == 4 charts (no universe section)
-    assert html.count("<svg") == 4
-    assert html.count("</svg>") == 4
+    # equity + drawdown + daily-pnl + cost-waterfall + per-symbol bar == 5 charts
+    # (the fixture is multi-symbol so the per-symbol breakdown renders; the rolling
+    # Sharpe is gated off for a 5-day run; no universe section).
+    assert html.count("<svg") == 5
+    assert html.count("</svg>") == 5
+    assert html.count("<svg") == html.count("</svg>")  # balanced (well-formed)
 
 
 def test_dashboard_is_deterministic(bt_result):
@@ -182,7 +185,7 @@ def test_universe_section_renders_tables_and_heatmap(bt_result):
     assert "Cross-sectional universe" in html
     assert "Per-symbol Sharpe" in html
     assert "best single trial" in html.lower()
-    assert html.count("<svg") == 5  # 4 charts + 1 heatmap
+    assert html.count("<svg") == 6  # 4 core charts + per-symbol bar + universe heatmap
     _assert_offline(html)
 
 
@@ -439,3 +442,73 @@ def test_exit_reasons_renders_bars_and_escapes():
 
 def test_exit_reasons_empty_is_blank():
     assert dash._exit_reasons(SimpleNamespace(exit_reason_counts={})) == ""
+
+
+# --------------------------------------------------------------------------- #
+# Aesthetics / UX additions (PR3): KPIs, colour-blind + print, per-symbol,
+# rolling Sharpe, empty-state.
+# --------------------------------------------------------------------------- #
+def _quick_run(symbols, start, end, *, edge=0.5, entry_z=0.1, interval="5m"):
+    cfg = EngineConfig.default()
+    prov = SyntheticDataProvider(cfg.data, cfg.session)
+    bt = IntradayBacktester(cfg, prov, [S3VwapOrb(entry_z=entry_z, edge=edge)])
+    return bt.run(symbols, start, end, interval)
+
+
+def test_dashboard_shows_sortino_and_calmar(bt_result):
+    html = build_dashboard(bt_result, generated_at=GEN)
+    assert "Sortino" in html and "Calmar" in html
+
+
+def test_dashboard_has_colourblind_and_print_affordances(bt_result):
+    html = build_dashboard(bt_result, generated_at=GEN)
+    assert "@media print" in html                       # legible PDF/paper export
+    assert "svg text{fill:#333}" in html                # print darkens chart labels
+    assert "--pos:#1a7f37" in html                      # print darkens semantic colours
+    assert r'content:"\25B2"' in html and r'content:"\25BC"' in html  # up/down chevrons
+    # tie to a real KPI value carrying the chevron class (not just the CSS token).
+    assert "kpi__value pos signed" in html or "kpi__value neg signed" in html
+    _assert_offline(html)
+
+
+def test_per_symbol_aggregation_sums_to_book(bt_result):
+    agg = dash._per_symbol_agg(bt_result)
+    m = build_report(bt_result)
+    assert agg and set(agg) <= set(bt_result.symbols)
+    assert sum(a["net"] for a in agg.values()) == pytest.approx(m.net_pnl, abs=1e-6)
+    assert sum(a["gross"] for a in agg.values()) == pytest.approx(m.gross_pnl, abs=1e-6)
+    assert sum(a["n"] for a in agg.values()) == len(bt_result.trades)
+    html = dash._per_symbol_section(bt_result)
+    for s in agg:
+        assert s in html
+
+
+def test_signed_cls_suppressed_for_non_finite():
+    assert dash._signed_cls(5.0) == "pos signed"
+    assert dash._signed_cls(-2.0) == "neg signed"
+    assert dash._signed_cls(float("inf")) == ""   # em-dash value -> no chevron/colour
+    assert dash._signed_cls(float("nan")) == ""
+
+
+def test_per_symbol_section_only_for_multi_symbol():
+    multi = _quick_run(["SPY", "QQQ"], date(2026, 5, 4), date(2026, 5, 8))
+    assert "Per-symbol breakdown" in build_dashboard(multi, generated_at=GEN)
+    single = _quick_run(["SPY"], date(2026, 5, 4), date(2026, 5, 8))
+    assert "Per-symbol breakdown" not in build_dashboard(single, generated_at=GEN)
+
+
+def test_rolling_sharpe_gated_on_length():
+    short = _quick_run(["SPY"], date(2026, 5, 4), date(2026, 5, 8))   # ~5 days
+    assert "Rolling Sharpe" not in build_dashboard(short, generated_at=GEN)
+    long = _quick_run(["SPY"], date(2026, 4, 1), date(2026, 5, 29))   # ~40 days
+    long_html = build_dashboard(long, generated_at=GEN)
+    assert "Rolling Sharpe" in long_html
+    assert long_html.count("<svg") == long_html.count("</svg>")       # still balanced
+
+
+def test_empty_blotter_uses_empty_state():
+    none = _quick_run(["SPY"], date(2026, 5, 4), date(2026, 5, 8), edge=0.0)
+    assert not none.trades                       # gate refused everything (no edge)
+    html = build_dashboard(none, generated_at=GEN)
+    assert "empty-state" in html and "refused every signal" in html
+    _assert_offline(html)
