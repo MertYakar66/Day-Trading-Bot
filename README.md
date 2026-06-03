@@ -81,7 +81,7 @@ python -m intraday version       # engine + Python versions
 > [`docs/sample_comparison.html`](docs/sample_comparison.html), and
 > [`docs/sample_index.html`](docs/sample_index.html).
 
-> **Status:** Phase 0 + Phase 1 complete and green (**475 tests**, lint + type-checked),
+> **Status:** Phase 0 + Phase 1 complete and green (**487 tests**, lint + type-checked),
 > plus a wired **real-data path**, a **powered, multiple-testing-honest evaluation**, and a
 > **self-contained HTML report suite** — `report` (dashboard), `compare`
 > (multi-strategy), `report-index`, and a JSON summary (`--emit-json`).
