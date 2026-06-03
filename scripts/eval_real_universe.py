@@ -153,6 +153,13 @@ def run(store_root: str, symbols, strategies, start, end, interval, edge, train_
             "n_symbols_traded": sum(1 for s in daily_by[name].values() if s.abs().sum() > 0),
         }
 
+    # Per-symbol annualized Sharpe matrix (additive; feeds the dashboard heatmap via
+    # `intraday report --universe-json`). Per-symbol single-book Sharpe, net of costs.
+    out["per_symbol"] = {
+        name: {sym: annualized_sharpe(s) for sym, s in daily_by[name].items() if len(s) >= 2}
+        for name in strategies
+    }
+
     # Cleanest DSR statement: the SINGLE BEST of all strategy×symbol trials,
     # deflated by the full trial count (this is the canonical Bailey-LdP target).
     combos = [(name, sym, s) for name in strategies for sym, s in daily_by[name].items()

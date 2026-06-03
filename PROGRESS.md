@@ -6,6 +6,46 @@
 
 ---
 
+## Session 2026-06-02 — Self-contained HTML dashboard (feat/html-dashboard)
+
+Autonomous session. Goal: a genuinely useful operator utility on top of the
+existing rigor — a **single offline HTML dashboard** that turns a finished
+backtest + its honesty eval into something you can actually look at. No Theta, no
+new heavy dependencies (charts are pure-Python inline SVG), fully tested.
+
+### What shipped
+
+- `intraday/report/svg.py` — dependency-free inline-SVG chart primitives
+  (`line_chart`, `area_chart`, `bar_chart`, `waterfall`, `heatmap`, `sparkline`).
+  Pure functions, deterministic (no clock/RNG), no external refs.
+- `intraday/report/dashboard.py` — `build_dashboard(result)` / `render_dashboard(...)`:
+  a one-file HTML doc with the SYNTHETIC-vs-REAL banner, the EDGE/NO-EDGE verdict
+  band (driven solely by the Deflated Sharpe), KPI cards, equity curve (vs capital
+  baseline), underwater drawdown, signed daily-PnL bars, the full honesty scorecard,
+  a gross→costs→net cost-attribution waterfall, exit-reason breakdown, a trade
+  blotter, and an optional cross-sectional **universe** section (per-strategy table
+  + per-symbol Sharpe heatmap) from `eval_real_universe.py` JSON.
+- `intraday/cli.py` — new `report` subcommand (shares run-args with `backtest` via
+  `_add_run_args`): `--out`, `--title`, `--n-trials`, `--universe-json`, `--open`.
+- `tests/test_report.py` — 22 tests: well-formed offline HTML (no external
+  resources), one-SVG-per-chart, determinism, banner/verdict driven by data+eval,
+  HTML-escaping (a backtest can't inject markup), drawdown math, defensive universe
+  rendering, every SVG primitive, and a CLI smoke test.
+- `docs/sample_dashboard.html` — a pre-rendered illustrative (synthetic) dashboard
+  to open without running anything. Generated `dashboard.html` is gitignored.
+
+### Properties locked
+
+- **Offline**: all CSS inlined, all charts inline SVG — the only `http://` in the
+  file is the inert SVG `xmlns`. No script/link/CDN. A test asserts this.
+- **Honest by construction**: the verdict is the eval's (`significant` ⇔ deflated
+  Sharpe ≥ 0.95), and SYNTHETIC is shouted, mirroring `metrics.render()`.
+- **Deterministic** given the same data + `generated_at` string.
+
+Full suite: **378 passed** (was 356; +22). No regressions; `main` releasable.
+
+---
+
 ## Session 2026-06-02 — Powered real-data evaluation (feat/real-data-eval)
 
 Autonomous session. Goal: get real data deep enough for a **statistically powered,

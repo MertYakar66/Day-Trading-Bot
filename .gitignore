@@ -29,3 +29,8 @@ env/
 # Raw vendor data pulls (large, regenerable from IBKR/Theta — never committed).
 # Small captured slices used as test fixtures live under tests/fixtures/ instead.
 data_raw/
+
+# Generated dashboards (regenerable via `python -m intraday report`). The tracked
+# illustrative example lives at docs/sample_dashboard.html.
+/dashboard.html
+/*.dashboard.html

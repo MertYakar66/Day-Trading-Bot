@@ -11,8 +11,10 @@ optionally persists the run's signals + paper-ledger fills to ``data_store/``.
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -135,16 +137,62 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     return 0
 
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="intraday", description="Intraday engine (paper-only).")
-    sub = p.add_subparsers(dest="command", required=True)
+def cmd_report(args: argparse.Namespace) -> int:
+    """Run a backtest and write a self-contained HTML dashboard (paper-only)."""
+    from .report import build_dashboard
 
-    bt = sub.add_parser("backtest", help="Run the Phase-0 backtest and print metrics.")
-    bt.add_argument("--start", type=date.fromisoformat, default=date(2026, 5, 1))
-    bt.add_argument("--end", type=date.fromisoformat, default=date(2026, 5, 29))
-    bt.add_argument("--symbols", nargs="*", default=None, help="default: SPX SPY QQQ")
-    bt.add_argument("--interval", default="1m")
-    bt.add_argument(
+    cfg = _build_config(args.nav)
+    symbols = args.symbols or list(DEFAULT_SYMBOLS)
+    provider = _build_provider(args, cfg, symbols)
+    strategies = _build_strategies(args.strategy, args.edge, args.entry_z, args.stop_k)
+    bt = IntradayBacktester(cfg, provider, strategies)
+
+    logger.info(
+        "report | source=%s symbols=%s %s..%s interval=%s",
+        provider.source.value, symbols, args.start, args.end, args.interval,
+    )
+    result = bt.run(symbols, args.start, args.end, args.interval)
+
+    universe = None
+    if args.universe_json:
+        path = Path(args.universe_json)
+        if not path.exists():
+            raise SystemExit(f"--universe-json not found: {path}")
+        universe = json.loads(path.read_text(encoding="utf-8"))
+
+    n_trials = args.n_trials if args.n_trials is not None else len(strategies)
+    html = build_dashboard(
+        result,
+        n_trials=n_trials,
+        title=args.title,
+        generated_at=datetime.now().isoformat(timespec="seconds"),
+        universe=universe,
+        run_meta={
+            "start": args.start.isoformat(),
+            "end": args.end.isoformat(),
+            "strategies": " ".join(args.strategy),
+        },
+    )
+    out = Path(args.out)
+    if out.parent and not out.parent.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    print(f"dashboard written: {out.resolve()}  ({len(html):,} bytes)")
+
+    if args.open:
+        import webbrowser
+
+        webbrowser.open(out.resolve().as_uri())
+    return 0
+
+
+def _add_run_args(sp: argparse.ArgumentParser) -> None:
+    """Arguments shared by every subcommand that runs the engine (backtest/report)."""
+    sp.add_argument("--start", type=date.fromisoformat, default=date(2026, 5, 1))
+    sp.add_argument("--end", type=date.fromisoformat, default=date(2026, 5, 29))
+    sp.add_argument("--symbols", nargs="*", default=None, help="default: SPX SPY QQQ")
+    sp.add_argument("--interval", default="1m")
+    sp.add_argument(
         "--provider", choices=["synthetic", "ibkr-store", "yahoo-store", "theta-store"],
         default="synthetic",
         help="data source: 'synthetic' (default, deterministic fixture) or replay "
@@ -152,25 +200,48 @@ def build_parser() -> argparse.ArgumentParser:
              "underlying, 'theta-store' options). Real-data runs need prior ingestion "
              "(docs/REAL_DATA.md).",
     )
-    bt.add_argument("--store-root", dest="store_root", default="data_store",
+    sp.add_argument("--store-root", dest="store_root", default="data_store",
                     help="parquet store root for --provider *-store (default: data_store)")
-    bt.add_argument("--no-eval", dest="no_eval", action="store_true",
-                    help="skip the honesty scorecard (clustered-t / bootstrap-CI Sharpe / deflated Sharpe)")
-    bt.add_argument(
+    sp.add_argument(
         "--strategy", nargs="+", default=["s3"], choices=["s1", "s2", "s3", "s4", "s5"],
         help="strategies (default s3). s1/s2 load option features (slower); "
              "s3=VWAP reversion, s4=ORB breakout, s5=VWAP momentum (underlying-only).",
     )
-    bt.add_argument("--nav", type=float, default=None, help="paper NAV (assumption)")
-    bt.add_argument("--entry-z", dest="entry_z", type=float, default=2.0)
-    bt.add_argument("--stop-k", dest="stop_k", type=float, default=1.0)
-    bt.add_argument(
+    sp.add_argument("--nav", type=float, default=None, help="paper NAV (assumption)")
+    sp.add_argument("--entry-z", dest="entry_z", type=float, default=2.0)
+    sp.add_argument("--stop-k", dest="stop_k", type=float, default=1.0)
+    sp.add_argument(
         "--edge", dest="edge", type=float, default=0.10,
         help="S3 mean-reversion edge over the gambler's-ruin fair baseline "
              "(0.0 = no edge → gate refuses all trades)",
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="intraday", description="Intraday engine (paper-only).")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    bt = sub.add_parser("backtest", help="Run the Phase-0 backtest and print metrics.")
+    _add_run_args(bt)
+    bt.add_argument("--no-eval", dest="no_eval", action="store_true",
+                    help="skip the honesty scorecard (clustered-t / bootstrap-CI Sharpe / deflated Sharpe)")
     bt.add_argument("--store", action="store_true", help="persist signals + ledger")
     bt.set_defaults(func=cmd_backtest)
+
+    rp = sub.add_parser(
+        "report",
+        help="Run a backtest and write a self-contained HTML dashboard (offline, paper-only).",
+    )
+    _add_run_args(rp)
+    rp.add_argument("--out", default="dashboard.html",
+                    help="output HTML path (default: dashboard.html)")
+    rp.add_argument("--title", default="Intraday engine — backtest dashboard")
+    rp.add_argument("--n-trials", dest="n_trials", type=int, default=None,
+                    help="deflated-Sharpe trial count (default: number of strategies run)")
+    rp.add_argument("--universe-json", dest="universe_json", default=None,
+                    help="optional cross-sectional eval JSON (scripts/eval_real_universe.py) to embed")
+    rp.add_argument("--open", action="store_true", help="open the dashboard in a browser after writing")
+    rp.set_defaults(func=cmd_report)
     return p
 
 

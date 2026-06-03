@@ -38,12 +38,24 @@ python -m intraday backtest --provider yahoo-store --store-root data_raw/store_y
 # Powered, multiple-testing-honest evaluation across the universe:
 python -m scripts.eval_real_universe --store-root data_raw/store_yahoo        # clustered-t, bootstrap CI, deflated Sharpe
 
+# Self-contained HTML dashboard (offline; equity/drawdown/PnL charts, honesty scorecard,
+# cost waterfall, trade blotter) — open the file in any browser, no server, no deps:
+python -m intraday report --start 2026-05-01 --end 2026-05-29 --out dashboard.html --open
+python -m intraday report --provider yahoo-store --store-root data_raw/store_yahoo \
+    --symbols SPY QQQ --interval 5m --strategy s3 s4 s5 --start 2026-03-09 --end 2026-06-01 \
+    --universe-json data_raw/real_eval_results.json --out dashboard.html   # embeds the cross-section
+
 # Read-only paper poll (NO orders) at the latest stored session:
 python -m scripts.live_paper_poll --provider yahoo-store --store-root data_raw/store_yahoo --symbols SPY QQQ
 ```
 
-> **Status:** Phase 0 + Phase 1 complete and green (**356 tests**), plus a wired
-> **real-data path** and a **powered, multiple-testing-honest evaluation**.
+> A pre-rendered, illustrative (synthetic) dashboard lives at
+> [`docs/sample_dashboard.html`](docs/sample_dashboard.html) — open it in a browser
+> to see the layout without running anything.
+
+> **Status:** Phase 0 + Phase 1 complete and green (**378 tests**), plus a wired
+> **real-data path**, a **powered, multiple-testing-honest evaluation**, and a
+> **self-contained HTML dashboard** (`python -m intraday report`).
 > Strategies behind the one net-of-cost gate: S1 (gamma-regime), S2 (0DTE VRP,
 > **defined-risk only**), S3 (VWAP reversion), **S4 (ORB breakout)**, **S5 (VWAP
 > momentum)**, plus a paper ledger and a read-only live poller. **Data tiers:**
