@@ -137,9 +137,23 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _write_html(path_str: str, html: str, *, label: str, open_browser: bool) -> Path:
+    """Write an HTML report (creating parent dirs), print a line, optionally open it."""
+    out = Path(path_str)
+    if out.parent and not out.parent.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    print(f"{label} written: {out.resolve()}  ({len(html):,} bytes)")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(out.resolve().as_uri())
+    return out
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     """Run a backtest and write a self-contained HTML dashboard (paper-only)."""
-    from .report import build_dashboard
+    from .report import build_dashboard, build_summary
 
     cfg = _build_config(args.nav)
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
@@ -161,28 +175,72 @@ def cmd_report(args: argparse.Namespace) -> int:
         universe = json.loads(path.read_text(encoding="utf-8"))
 
     n_trials = args.n_trials if args.n_trials is not None else len(strategies)
+    run_meta = {
+        "start": args.start.isoformat(), "end": args.end.isoformat(),
+        "strategies": " ".join(args.strategy),
+    }
     html = build_dashboard(
-        result,
-        n_trials=n_trials,
-        title=args.title,
+        result, n_trials=n_trials, title=args.title,
         generated_at=datetime.now().isoformat(timespec="seconds"),
-        universe=universe,
-        run_meta={
-            "start": args.start.isoformat(),
-            "end": args.end.isoformat(),
-            "strategies": " ".join(args.strategy),
-        },
+        universe=universe, run_meta=run_meta,
     )
-    out = Path(args.out)
-    if out.parent and not out.parent.exists():
-        out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
-    print(f"dashboard written: {out.resolve()}  ({len(html):,} bytes)")
+    _write_html(args.out, html, label="dashboard", open_browser=args.open)
 
-    if args.open:
-        import webbrowser
+    if args.emit_json:
+        summary = build_summary(result, n_trials=n_trials, run_meta=run_meta)
+        Path(args.emit_json).write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        print(f"summary JSON written: {Path(args.emit_json).resolve()}")
+    return 0
 
-        webbrowser.open(out.resolve().as_uri())
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    """Run each strategy standalone and write a side-by-side comparison page."""
+    from .report import build_comparison, build_summary
+
+    cfg = _build_config(args.nav)
+    symbols = args.symbols or list(DEFAULT_SYMBOLS)
+    provider = _build_provider(args, cfg, symbols)  # read-only; reused across runs
+    run_meta = {
+        "start": args.start.isoformat(), "end": args.end.isoformat(),
+        "strategies": " ".join(args.strategy),
+    }
+    runs: list[tuple[str, object]] = []
+    for name in args.strategy:
+        strat = _build_strategies([name], args.edge, args.entry_z, args.stop_k)
+        bt = IntradayBacktester(cfg, provider, strat)
+        logger.info("compare | %s source=%s %s..%s interval=%s",
+                    name, provider.source.value, args.start, args.end, args.interval)
+        runs.append((name, bt.run(symbols, args.start, args.end, args.interval)))
+
+    html = build_comparison(
+        runs, title=args.title,
+        generated_at=datetime.now().isoformat(timespec="seconds"), run_meta=run_meta,
+    )
+    _write_html(args.out, html, label="comparison", open_browser=args.open)
+
+    if args.emit_json:
+        summaries = [
+            build_summary(res, n_trials=len(runs), run_meta={**run_meta, "strategies": name})
+            for name, res in runs
+        ]
+        Path(args.emit_json).write_text(json.dumps(summaries, indent=2), encoding="utf-8")
+        print(f"summary JSON written: {Path(args.emit_json).resolve()}")
+    return 0
+
+
+def cmd_report_index(args: argparse.Namespace) -> int:
+    """Build a static index linking every dashboard/comparison HTML in a directory."""
+    from .report import build_index
+
+    directory = Path(args.dir)
+    if not directory.is_dir():
+        raise SystemExit(f"--dir is not a directory: {directory}")
+    out = Path(args.out) if args.out else directory / "index.html"
+    html = build_index(
+        directory, title=args.title,
+        generated_at=datetime.now().isoformat(timespec="seconds"), index_name=out.name,
+    )
+    _write_html(str(out), html, label="index", open_browser=args.open)
     return 0
 
 
@@ -240,8 +298,33 @@ def build_parser() -> argparse.ArgumentParser:
                     help="deflated-Sharpe trial count (default: number of strategies run)")
     rp.add_argument("--universe-json", dest="universe_json", default=None,
                     help="optional cross-sectional eval JSON (scripts/eval_real_universe.py) to embed")
+    rp.add_argument("--emit-json", dest="emit_json", default=None,
+                    help="also write a machine-readable summary JSON to this path")
     rp.add_argument("--open", action="store_true", help="open the dashboard in a browser after writing")
     rp.set_defaults(func=cmd_report)
+
+    cp = sub.add_parser(
+        "compare",
+        help="Run several strategies standalone and write a side-by-side comparison page.",
+    )
+    _add_run_args(cp)
+    cp.set_defaults(strategy=["s3", "s4", "s5"])  # comparison is most useful multi-strategy
+    cp.add_argument("--out", default="compare.html", help="output HTML path (default: compare.html)")
+    cp.add_argument("--title", default="Intraday engine — strategy comparison")
+    cp.add_argument("--emit-json", dest="emit_json", default=None,
+                    help="also write a per-strategy summary JSON array to this path")
+    cp.add_argument("--open", action="store_true", help="open the comparison in a browser after writing")
+    cp.set_defaults(func=cmd_compare)
+
+    ix = sub.add_parser(
+        "report-index",
+        help="Build a static index.html linking every report in a directory.",
+    )
+    ix.add_argument("--dir", required=True, help="directory of *.html reports to index")
+    ix.add_argument("--out", default=None, help="output path (default: <dir>/index.html)")
+    ix.add_argument("--title", default="Intraday engine — report index")
+    ix.add_argument("--open", action="store_true", help="open the index in a browser after writing")
+    ix.set_defaults(func=cmd_report_index)
     return p
 
 

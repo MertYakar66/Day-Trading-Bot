@@ -42,9 +42,13 @@ intraday/
   live/                # read-only single-shot paper poll (NO orders)
     poller.py          #   LivePoller: snapshot → PIT features → gate → reviewers → paper decision
 
-  report/              # self-contained OFFLINE HTML dashboard (no deps, no CDN)
-    svg.py             #   pure-Python inline-SVG charts (line/area/bars/waterfall/heatmap)
+  report/              # self-contained OFFLINE HTML reports (no deps, no CDN)
+    theme.py           #   shared CSS + document() shell (one stylesheet for all pages)
+    svg.py             #   pure-Python inline-SVG charts (line/multi-line/area/bars/waterfall/heatmap)
     dashboard.py       #   render_dashboard/build_dashboard: KPIs + charts + honesty scorecard
+    comparison.py      #   build_comparison: overlay strategies (equity curves + ranked table)
+    index_page.py      #   build_index: static index linking every report in a directory
+    export.py          #   summary_dict/build_summary: machine-readable JSON sibling
 
   features/            # T0.3 — causal, PIT-sampled feature builders
     base.py            #   FeatureRow + latest_value PIT sampler
@@ -75,7 +79,7 @@ intraday/
     records.py         #   canonical fill/trade/signal serializers (shared w/ backtest)
     paper_ledger.py    #   PaperLedger (record parity; persists to store)
 
-  cli.py / __main__.py # `python -m intraday backtest|report --strategy {s1..s5} ...`
+  cli.py / __main__.py # `python -m intraday backtest|report|compare|report-index ...`
 ```
 
 ## The hard invariants (where they live)

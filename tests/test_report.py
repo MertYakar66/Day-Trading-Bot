@@ -408,3 +408,34 @@ def test_area_chart_shows_positive_values_above_zero():
     # adaptive scale: a positive blip is not silently squashed into [-1, 0]
     out = svg.area_chart([0.0, 0.02, -0.05])
     assert out.startswith("<svg") and "<polyline" in out
+
+
+def test_all_svg_primitives_wellformed_on_edge_cases():
+    """Every primitive returns balanced <svg>...</svg> for empty/single/normal input."""
+    for vals in ([], [1.0], [1.0, 2.0, 3.0]):
+        for fn in (svg.line_chart, svg.area_chart, svg.bar_chart, svg.sparkline):
+            out = fn(vals)
+            assert out.startswith("<svg") and out.rstrip().endswith("</svg>"), fn.__name__
+    assert svg.waterfall([("a", 1.0, "total")]).startswith("<svg")
+    assert svg.heatmap([[1.0]], ["r"], ["c"]).startswith("<svg")
+    assert svg.multi_line_chart([[1.0, 2.0], [2.0, 1.0]]).startswith("<svg")
+
+
+# --------------------------------------------------------------------------- #
+# Section builders: cost attribution + exit reasons
+# --------------------------------------------------------------------------- #
+def test_cost_attribution_renders_chart_and_facts(bt_result):
+    html = dash._cost_attribution(build_report(bt_result))
+    assert "<svg" in html  # the gross->costs->net waterfall
+    for fact in ("cost / NAV", "cost / trade", "profit factor", "payoff ratio"):
+        assert fact in html
+
+
+def test_exit_reasons_renders_bars_and_escapes():
+    html = dash._exit_reasons(SimpleNamespace(exit_reason_counts={"target": 5, "<b>x</b>": 2}))
+    assert "exitreasons" in html
+    assert "<b>x</b>" not in html and "&lt;b&gt;x&lt;/b&gt;" in html  # reason escaped
+
+
+def test_exit_reasons_empty_is_blank():
+    assert dash._exit_reasons(SimpleNamespace(exit_reason_counts={})) == ""

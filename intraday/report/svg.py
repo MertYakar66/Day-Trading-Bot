@@ -34,6 +34,13 @@ AXIS = "#3d4452"      # axis / zero line
 TEXT = "#9aa4b2"      # tick labels
 MUTED = "#6e7681"
 
+# Distinct, reasonably colour-blind-friendly colours for overlaying N series
+# (multi_line_chart) — the matching HTML legend in comparison.py reads this list.
+SERIES_PALETTE: tuple[str, ...] = (
+    "#4f9cff", "#f0883e", "#3fb950", "#bc8cff",
+    "#f85149", "#56d4dd", "#e3b341", "#ff7b72",
+)
+
 
 def _isfinite(x) -> bool:
     """True iff ``x`` is a finite real number (rejects NaN, ±inf, and non-numbers)."""
@@ -185,6 +192,74 @@ def line_chart(
     return (
         _open(width, height, "chart--line")
         + grid + area + base_line + line + xlab + "</svg>"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Multi-line chart (overlay N series — e.g. strategy equity comparison)
+# --------------------------------------------------------------------------- #
+def multi_line_chart(
+    series: Sequence[Sequence[float]],
+    *,
+    width: int = 760,
+    height: int = 300,
+    baseline: float | None = None,
+    labels: Sequence[str] | None = None,
+    colors: Sequence[str] = SERIES_PALETTE,
+    value_fmt=lambda v: f"{v:,.2f}",
+) -> str:
+    """Overlay several series on one set of axes (no fill, for clarity). Each series
+    is drawn in ``colors[i]``; the caller renders a matching legend. Series may have
+    different lengths — each is mapped across the full width by its own length."""
+    clean = [_finite(s) for s in series]
+    drawable = [s for s in clean if len(s) >= 2]
+    if not drawable:
+        return _empty(width, height)
+
+    pad_l, pad_r, pad_t, pad_b = 8, 56, 12, 22
+    x0, x1 = pad_l, width - pad_r
+    y_top, y_bot = pad_t, height - pad_b
+
+    flat = [v for s in drawable for v in s]
+    lo, hi = min(flat), max(flat)
+    if baseline is not None:
+        lo, hi = min(lo, baseline), max(hi, baseline)
+    if hi == lo:
+        hi += 1.0
+        lo -= 1.0
+
+    def sy(v: float) -> float:
+        return y_bot - (v - lo) / (hi - lo) * (y_bot - y_top)
+
+    grid = _y_gridlines(lo, hi, x0, x1, y_top, y_bot, value_fmt, n=4)
+    base_line = ""
+    if baseline is not None:
+        by = sy(baseline)
+        base_line = (
+            f'<line x1="{_f(x0)}" y1="{_f(by)}" x2="{_f(x1)}" y2="{_f(by)}" '
+            f'stroke="{MUTED}" stroke-width="1" stroke-dasharray="4 3"/>'
+        )
+
+    lines: list[str] = []
+    longest = 0
+    for idx, s in enumerate(clean):
+        if len(s) < 2:
+            continue
+        longest = max(longest, len(s))
+        color = colors[idx % len(colors)]
+        pts = " ".join(
+            f"{_f(x0 + (x1 - x0) * i / (len(s) - 1))},{_f(sy(v))}"
+            for i, v in enumerate(s)
+        )
+        lines.append(
+            f'<polyline points="{pts}" fill="none" stroke="{color}" '
+            f'stroke-width="2" stroke-opacity="0.92"/>'
+        )
+
+    xlab = _x_labels(labels, longest, x0, x1, height - 6)
+    return (
+        _open(width, height, "chart--multiline")
+        + grid + base_line + "".join(lines) + xlab + "</svg>"
     )
 
 
