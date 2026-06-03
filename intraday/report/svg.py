@@ -37,8 +37,10 @@ MUTED = "#6e7681"
 # Distinct, reasonably colour-blind-friendly colours for overlaying N series
 # (multi_line_chart) — the matching HTML legend in comparison.py reads this list.
 SERIES_PALETTE: tuple[str, ...] = (
+    # ordered so the first colours have similar luminance on the dark background;
+    # the dimmest red (#f85149) is last so it only appears when 8 series overlay.
     "#4f9cff", "#f0883e", "#3fb950", "#bc8cff",
-    "#f85149", "#56d4dd", "#e3b341", "#ff7b72",
+    "#ff7b72", "#56d4dd", "#e3b341", "#f85149",
 )
 
 

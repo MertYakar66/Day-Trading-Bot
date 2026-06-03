@@ -91,6 +91,39 @@ padding:4px 0;font-size:12.5px}
 padding:11px 4px;border-bottom:1px solid var(--bd)}
 .idx .idx__title{font-weight:600}
 .idx .idx__meta{color:var(--mut);font-size:12px}
+/* per-symbol breakdown */
+.psym td,.psym th{padding:7px 10px;border-bottom:1px solid var(--bd);text-align:right;white-space:nowrap}
+.psym th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase}
+.psym td:first-child,.psym th:first-child{text-align:left;font-weight:600}
+/* colour-blind aid: a non-chromatic up/down marker on signed KPI values. The
+   value text also carries a +/- sign; this marks direction by SHAPE too so the
+   green/red is never the only cue (~8% of men cannot separate red from green). */
+.kpi__value.signed.pos::before{content:"\\25B2";font-size:.6em;margin-right:5px;vertical-align:middle;opacity:.85}
+.kpi__value.signed.neg::before{content:"\\25BC";font-size:.6em;margin-right:5px;vertical-align:middle;opacity:.85}
+/* empty state (e.g. the gate refused every signal) — make an empty result a clear
+   statement, not a faint afterthought. */
+.empty-state{text-align:center;padding:34px 20px;background:rgba(79,156,255,.05);
+border:1px dashed var(--bd);border-radius:8px;color:var(--mut);font-style:italic;font-size:13.5px}
+/* print / PDF export: invert the dark theme so paper output is legible and not a
+   sea of ink, and keep cards/charts/tables from splitting across pages. */
+@media print{
+  /* also darken the semantic colours so green/red headline numbers stay legible on
+     white (the dark-theme values wash out to ~2.5:1 on paper). */
+  :root{--bg:#fff;--card:#fff;--card2:#f2f3f5;--bd:#cfd5dd;--fg:#111;--mut:#555;
+        --pos:#1a7f37;--neg:#c1121f;--acc:#0a58ca}
+  body{background:#fff;color:#111}
+  .wrap{max-width:none;padding:0 0 8px}
+  .card,section.card{break-inside:avoid;page-break-inside:avoid;border:1px solid #cfd5dd}
+  .kpi{border:1px solid #cfd5dd}
+  .scroll-y{max-height:none;overflow:visible}
+  .blotter th{position:static;background:#f2f3f5}
+  svg,table,.kpi,.verdict,.banner{break-inside:avoid;page-break-inside:avoid}
+  /* SVG chart labels carry a hardcoded dark-theme grey FILL ATTRIBUTE; a type
+     selector beats a presentation attribute (lowest cascade priority), so this
+     darkens tick/axis/value text for paper without touching screen rendering. */
+  svg text{fill:#333}
+  a{color:#111;text-decoration:none}
+}
 """
 
 
