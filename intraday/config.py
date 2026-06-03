@@ -37,6 +37,15 @@ class CostConfig:
     # Minimum modelled spread as a fraction of price when no quote is available.
     fallback_spread_pct: float = 0.0005           # 5 bps of price (liquid index ETFs)
 
+    def __post_init__(self) -> None:
+        # Costs may never be negative — a negative cost would silently inflate PnL.
+        for name in (
+            "impact_coefficient", "option_commission_per_contract",
+            "stock_commission_per_share", "fallback_spread_pct",
+        ):
+            if getattr(self, name) < 0:
+                raise ValueError(f"CostConfig.{name} must be >= 0, got {getattr(self, name)!r}")
+
 
 @dataclass(frozen=True)
 class RiskConfig:
@@ -56,6 +65,37 @@ class RiskConfig:
     min_size: int = 1
     max_size: int = 1_000
 
+    def __post_init__(self) -> None:
+        # Reject nonsensical risk parameters early (e.g. a CLI ``--nav -1000``)
+        # rather than crashing deep in sizing/gate or producing silent nonsense.
+        if self.paper_nav <= 0:
+            raise ValueError(f"RiskConfig.paper_nav must be > 0, got {self.paper_nav!r}")
+        if not 0 < self.kelly_fraction <= 1:
+            raise ValueError(
+                f"RiskConfig.kelly_fraction must be in (0, 1], got {self.kelly_fraction!r}"
+            )
+        for name in ("max_risk_per_trade_pct", "max_position_notional_pct"):
+            v = getattr(self, name)
+            if not 0 < v <= 1:
+                raise ValueError(f"RiskConfig.{name} must be in (0, 1], got {v!r}")
+        if not 0 <= self.daily_loss_limit_pct <= 1:
+            raise ValueError(
+                f"RiskConfig.daily_loss_limit_pct must be in [0, 1], "
+                f"got {self.daily_loss_limit_pct!r}"
+            )
+        if self.max_concurrent_positions < 1:
+            raise ValueError(
+                f"RiskConfig.max_concurrent_positions must be >= 1, "
+                f"got {self.max_concurrent_positions!r}"
+            )
+        if self.min_size < 1:
+            raise ValueError(f"RiskConfig.min_size must be >= 1, got {self.min_size!r}")
+        if self.max_size < self.min_size:
+            raise ValueError(
+                f"RiskConfig.max_size ({self.max_size!r}) must be >= "
+                f"min_size ({self.min_size!r})"
+            )
+
 
 @dataclass(frozen=True)
 class SessionConfig:
@@ -67,6 +107,18 @@ class SessionConfig:
     # Hard time-stop: flatten this many minutes before the close (no overnight).
     flatten_before_close_min: int = 5
 
+    def __post_init__(self) -> None:
+        if self.rth_open >= self.rth_close:
+            raise ValueError(
+                f"SessionConfig.rth_open ({self.rth_open}) must be before "
+                f"rth_close ({self.rth_close})"
+            )
+        if self.flatten_before_close_min < 0:
+            raise ValueError(
+                f"SessionConfig.flatten_before_close_min must be >= 0, "
+                f"got {self.flatten_before_close_min!r}"
+            )
+
 
 @dataclass(frozen=True)
 class GateConfig:
@@ -77,6 +129,17 @@ class GateConfig:
     # is always blocked regardless of this value.
     ev_threshold: float = 0.0
     risk_free_rate: float = 0.04  # annual decimal, for metrics/pricing
+
+    def __post_init__(self) -> None:
+        # Negative EV is always blocked by the gate before the threshold is read, so
+        # a negative threshold is meaningless; require >= 0.
+        if self.ev_threshold < 0:
+            raise ValueError(f"GateConfig.ev_threshold must be >= 0, got {self.ev_threshold!r}")
+        if not 0 <= self.risk_free_rate <= 1:
+            raise ValueError(
+                f"GateConfig.risk_free_rate must be in [0, 1] (annual decimal), "
+                f"got {self.risk_free_rate!r}"
+            )
 
 
 @dataclass(frozen=True)

@@ -39,7 +39,7 @@ from ..contracts import (
     Verdict,
 )
 from ..data.provider import DataProvider, asset_kind_for
-from ..data.quality import assert_no_feed_gap
+from ..data.quality import assert_finite_bars, assert_no_feed_gap
 from ..features.base import FeatureRow
 from ..features.gex import gamma_structure_at
 from ..features.ofi import ofi_at
@@ -157,7 +157,9 @@ class IntradayBacktester:
         loaded: dict[str, dict] = {}
         for sym in symbols:
             bars = self.provider.get_bars(sym, day, interval)
-            # DESIGN §2.4 freshness: halt on a gapped feed rather than guess.
+            # DESIGN §2.4 freshness: halt on a gapped feed or malformed bars rather
+            # than guess (a NaN/inf price or empty session must not poison equity).
+            assert_finite_bars(bars.frame, symbol=sym, day=day)
             assert_no_feed_gap(bars.frame.index, interval)
             sf = self.pipeline.precompute(bars, day)
             frame = bars.frame
@@ -183,14 +185,26 @@ class IntradayBacktester:
         ref = loaded[symbols[0]]
         index = ref["frame"].index
         n = len(index)
-        # All symbols share the same RTH bar grid; guard against a mismatch so an
-        # accidental misalignment surfaces loudly rather than silently using i on
-        # a differently-indexed frame.
+        # All symbols share the same RTH bar grid; the engine indexes every symbol by
+        # the same positional ``i``, so a mismatch would silently read symbol B's bar
+        # i against symbol A's timestamp i. Guard not just the LENGTH but the actual
+        # timestamps — a feed hiccup can shift one symbol by an interval while keeping
+        # the same count, which a length-only check would miss.
         for sym in symbols:
-            if len(loaded[sym]["frame"].index) != n:
+            other = loaded[sym]["frame"].index
+            if len(other) != n:
                 raise ValueError(
-                    f"bar index length mismatch for {sym}: "
-                    f"{len(loaded[sym]['frame'].index)} != {n}"
+                    f"bar index length mismatch for {sym}: {len(other)} != {n} "
+                    f"(reference {symbols[0]})"
+                )
+            if not other.equals(index):
+                first_bad = next(
+                    (j for j in range(n) if other[j] != index[j]), 0
+                )
+                raise ValueError(
+                    f"bar index timestamp mismatch for {sym} vs {symbols[0]} at "
+                    f"position {first_bad}: {other[first_bad]} != {index[first_bad]} "
+                    "(symbols must share one RTH bar grid)"
                 )
         bar_latency = loaded[symbols[0]]["bars"].latency
         flatten_at = flatten_time_utc(day, cfg.session)

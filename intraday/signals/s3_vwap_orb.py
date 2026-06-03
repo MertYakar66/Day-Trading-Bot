@@ -87,10 +87,13 @@ class S3VwapOrb:
             stop = ref - self.stop_k * sigma
 
         # No-edge fair baseline (gambler's ruin) + the explicit edge thesis.
+        # Require strictly positive geometry (mirrors S1) so p_fair is always a
+        # genuine gambler's-ruin probability rather than a silent 0.5 fallback.
         reward = abs(target - ref)
         risk = abs(ref - stop)
-        denom = reward + risk
-        p_fair = (risk / denom) if denom > 0 else 0.5
+        if reward <= 0 or risk <= 0:
+            return None
+        p_fair = risk / (reward + risk)
         win_prob = min(0.99, max(0.01, p_fair + self.edge))
 
         return SignalProposal(
