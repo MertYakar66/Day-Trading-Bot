@@ -27,11 +27,6 @@ from .ibkr import (
     IBKRContract,
     IBKRDataProvider,
 )
-from .yahoo import (
-    UrllibYahooClient,
-    YahooClient,
-    YahooDataProvider,
-)
 from .parity import (
     ParityUnderlyingProvider,
     forward_from_parity,
@@ -58,6 +53,11 @@ from .store import ParquetStore
 from .store_provider import StoreBackedProvider
 from .synthetic import SyntheticDataProvider
 from .theta_adapter import ThetaDataProvider, ThetaNotConnectedThisSession
+from .yahoo import (
+    UrllibYahooClient,
+    YahooClient,
+    YahooDataProvider,
+)
 
 __all__ = [
     "DataProvider",

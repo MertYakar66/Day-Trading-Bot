@@ -14,7 +14,7 @@ import pytest
 
 from intraday.authority.gate import ExpectancyGate
 from intraday.config import EngineConfig
-from intraday.contracts import AssetKind, SignalProposal, Side, Verdict
+from intraday.contracts import AssetKind, Side, SignalProposal, Verdict
 
 pytestmark = pytest.mark.gate
 

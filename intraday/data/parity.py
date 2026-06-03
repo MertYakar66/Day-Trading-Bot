@@ -21,7 +21,6 @@ cumulative mean, exactly as for an index).
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from datetime import date
 
@@ -31,7 +30,8 @@ import pandas as pd
 from ..config import EngineConfig, SessionConfig
 from ..contracts import BAR_COLUMNS, BarSeries, DataSource, OptionChainSeries, OptionTape
 from ..logging_config import get_logger
-from ..timeutils import bar_close_index, parse_interval, session_bounds_utc, trading_days as _td
+from ..timeutils import bar_close_index, parse_interval, session_bounds_utc
+from ..timeutils import trading_days as _td
 from .provider import DataProvider, DataUnavailable
 
 logger = get_logger(__name__)

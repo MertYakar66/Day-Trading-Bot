@@ -1,0 +1,17 @@
+# Pre-commit hooks mirror the CI gates (pinned to the same versions so local ==
+# CI). Install once with:  pip install -e ".[dev]" && pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.0
+    hooks:
+      - id: ruff               # lint (autofix); config in pyproject [tool.ruff]
+        args: [--fix]
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (intraday)
+        entry: python -m mypy   # uses the project env + [tool.mypy] config
+        language: system
+        types: [python]
+        pass_filenames: false

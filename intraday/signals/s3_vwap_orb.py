@@ -26,7 +26,7 @@ control from rubber-stamping itself through the gate.
 from __future__ import annotations
 
 from ..config import EngineConfig
-from ..contracts import AssetKind, SignalProposal, Side
+from ..contracts import AssetKind, Side, SignalProposal
 from ..data.provider import asset_kind_for
 from ..features.base import FeatureRow
 

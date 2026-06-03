@@ -120,3 +120,8 @@ concurrently); the path is delivered + proven by tests, and executed by the oper
   `[REAL DATA: <source>]` for real — a real result can never be mistaken for
   synthetic or vice-versa.
 - All results are **net of costs**; no parameter is fit on the evaluation data.
+- **CI and `pytest` always use the network-free `SyntheticDataProvider`.** Real-data
+  ingestion and backtests are run by the operator offline; only small captured slices
+  live under `tests/fixtures/` for the integration tests. Developers never fetch live
+  data in tests — `read_bars` even refuses to serve a parquet whose provenance sidecar
+  is missing rather than guess a source.

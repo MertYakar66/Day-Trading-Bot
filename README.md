@@ -18,6 +18,21 @@ minutes-to-hours intraday decisions.
 - **Real-data path:** [`docs/REAL_DATA.md`](docs/REAL_DATA.md) +
   [`docs/OPERATOR_RUNBOOK.md`](docs/OPERATOR_RUNBOOK.md) — the corrected data-tier
   wiring (IBKR/parity underlying, Theta OPTIONS) and the scoped operator Theta pull.
+- **Contributing & changes:** [`CONTRIBUTING.md`](CONTRIBUTING.md) (guardrails + dev
+  setup), [`CHANGELOG.md`](CHANGELOG.md).
+
+### Reading guide
+
+Pick a path by what you want:
+
+- **Just the results?** → [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) §0 (headline +
+  powered evaluation), or open the pre-rendered [`docs/sample_dashboard.html`](docs/sample_dashboard.html).
+- **Building or reviewing code?** → [`DESIGN.md`](DESIGN.md) (spec) →
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (layout) → [`PROGRESS.md`](PROGRESS.md) (decisions).
+- **Running data pulls (operator)?** → [`docs/OPERATOR_RUNBOOK.md`](docs/OPERATOR_RUNBOOK.md).
+- **Automated agent?** → [`TASKS.md`](TASKS.md) (ordered tasks with done-criteria).
+- **First time on this machine?** → `python -m intraday doctor` (checks Python, the
+  read-only SWE dependency, and available data; never touches the network).
 
 ## Quickstart
 
@@ -54,6 +69,11 @@ python -m intraday report-index --dir reports/ --out reports/index.html
 
 # Read-only paper poll (NO orders) at the latest stored session:
 python -m scripts.live_paper_poll --provider yahoo-store --store-root data_raw/store_yahoo --symbols SPY QQQ
+
+# Utilities:
+python -m intraday doctor        # environment health (no network; never probes Theta)
+python -m intraday strategies    # list strategies and what each does
+python -m intraday version       # engine + Python versions
 ```
 
 > Pre-rendered, illustrative (synthetic) examples to open without running anything:
@@ -61,8 +81,8 @@ python -m scripts.live_paper_poll --provider yahoo-store --store-root data_raw/s
 > [`docs/sample_comparison.html`](docs/sample_comparison.html), and
 > [`docs/sample_index.html`](docs/sample_index.html).
 
-> **Status:** Phase 0 + Phase 1 complete and green (**419 tests**), plus a wired
-> **real-data path**, a **powered, multiple-testing-honest evaluation**, and a
+> **Status:** Phase 0 + Phase 1 complete and green (**475 tests**, lint + type-checked),
+> plus a wired **real-data path**, a **powered, multiple-testing-honest evaluation**, and a
 > **self-contained HTML report suite** — `report` (dashboard), `compare`
 > (multi-strategy), `report-index`, and a JSON summary (`--emit-json`).
 > Strategies behind the one net-of-cost gate: S1 (gamma-regime), S2 (0DTE VRP,

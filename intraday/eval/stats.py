@@ -165,7 +165,7 @@ def deflated_sharpe_ratio(
     return probabilistic_sharpe_ratio(sr_hat, n, skew, kurt, sr_star=sr_star)
 
 
-def evaluate_result(result, **kwargs) -> "StrategyEval":
+def evaluate_result(result, **kwargs) -> StrategyEval:
     """Convenience: honesty scorecard straight from a BacktestResult."""
     return evaluate_daily_pnl(daily_pnl_from_result(result), **kwargs)
 

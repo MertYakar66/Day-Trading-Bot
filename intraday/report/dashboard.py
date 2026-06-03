@@ -36,6 +36,7 @@ from ..metrics import MetricsReport, build_report
 from . import svg
 from .theme import document
 
+
 # --------------------------------------------------------------------------- #
 # Small formatting helpers
 # --------------------------------------------------------------------------- #

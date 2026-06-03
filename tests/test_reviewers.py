@@ -18,14 +18,13 @@ from intraday.authority.reviewers import (
     ReviewContext,
     build_default_event_gate,
 )
-from intraday.config import EngineConfig
 from intraday.contracts import (
     AssetKind,
     CostBreakdown,
     GammaRegime,
     GateResult,
-    SignalProposal,
     Side,
+    SignalProposal,
     Verdict,
 )
 from intraday.features.base import FeatureRow
@@ -54,7 +53,6 @@ def test_with_downgrade_never_upgrades():
 
 def test_reviewers_cannot_rescue_blocked():
     """A BLOCKED result stays BLOCKED through every reviewer (no rescue)."""
-    cfg = EngineConfig.default()
     reviewers = [
         EventLockoutReviewer(build_default_event_gate([2026])),
         RegimeFilterReviewer({GammaRegime.SHORT_GAMMA: Verdict.SKIP}),

@@ -26,9 +26,8 @@ from intraday.data.synthetic import SyntheticDataProvider
 from intraday.eval import evaluate_result
 from intraday.eval.stats import StrategyEval
 from intraday.metrics import build_report
-from intraday.report import build_dashboard, render_dashboard
+from intraday.report import build_dashboard, render_dashboard, svg
 from intraday.report import dashboard as dash
-from intraday.report import svg
 from intraday.signals.s3_vwap_orb import S3VwapOrb
 
 GEN = "2026-06-02T12:00:00"

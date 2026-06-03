@@ -15,8 +15,8 @@ import math
 import pandas as pd
 import pytest
 
-from intraday.features.vrp import VRP, atm_iv_at, vrp_at
 from intraday.features.realized_vol import intraday_rv
+from intraday.features.vrp import VRP, atm_iv_at, vrp_at
 from intraday.timeutils import session_bounds_utc
 
 pytestmark = pytest.mark.swe

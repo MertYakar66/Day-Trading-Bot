@@ -54,7 +54,7 @@ class PaperLedger:
 
     # -- parity with the backtest --------------------------------------- #
     @classmethod
-    def from_backtest(cls, result) -> "PaperLedger":
+    def from_backtest(cls, result) -> PaperLedger:
         """Build a ledger from a finished backtest — same fills/trades/signals/
         equity, proving the record shapes are identical."""
         led = cls(result.initial_capital)
@@ -91,5 +91,5 @@ class PaperLedger:
         by_day_fills: dict[date, list[Fill]] = defaultdict(list)
         for f in self.fills:
             by_day_fills[pd.Timestamp(f.ts).date()].append(f)
-        for d, rows in by_day_fills.items():
-            store.write_ledger(d, fills_to_df(rows))
+        for d, frows in by_day_fills.items():
+            store.write_ledger(d, fills_to_df(frows))

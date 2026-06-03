@@ -179,5 +179,5 @@ class EngineConfig:
     symbols: tuple[str, ...] = DEFAULT_SYMBOLS
 
     @classmethod
-    def default(cls) -> "EngineConfig":
+    def default(cls) -> EngineConfig:
         return cls()

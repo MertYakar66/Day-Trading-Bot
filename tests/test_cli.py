@@ -13,8 +13,8 @@ import pytest
 
 from intraday.cli import build_parser, main
 from intraday.config import EngineConfig
-from intraday.data.synthetic import SyntheticDataProvider
 from intraday.data.store import ParquetStore
+from intraday.data.synthetic import SyntheticDataProvider
 from intraday.signals.registry import (
     STRATEGIES,
     STRATEGY_KEYS,

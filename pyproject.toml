@@ -4,14 +4,52 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intraday-engine"
-version = "0.0.0"
-description = "Standalone intraday day-trading decision engine (Phase 0). PAPER ONLY."
+version = "0.1.0"
+description = "Standalone intraday day-trading decision engine (paper-only research). Honesty-first."
 requires-python = ">=3.11"
 readme = "README.md"
+# PEP 639: SPDX expression + explicit license file (the legacy table form and the
+# License:: classifier are deprecated and hard-error in setuptools after 2027-02-18).
+# "LicenseRef-Proprietary" = a custom, all-rights-reserved licence (see LICENSE).
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
+authors = [{ name = "Mert Yakar", email = "mertyakar.my@gmail.com" }]
+maintainers = [{ name = "Mert Yakar", email = "mertyakar.my@gmail.com" }]
+keywords = ["trading", "intraday", "backtest", "quant", "research", "paper-trading"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
 # Runtime deps are pinned in requirements.txt (kept editable so the SWE
 # submodule's own requirements can be reconciled by hand). This table is
-# intentionally light; the project is run from source, not installed.
+# intentionally light; the project is run from source, not installed. NOTE: the
+# read-only SWE quant dependency (vendor/swe) is NOT pip-installable — a working
+# install also needs that submodule on the path (see README -> Dependencies).
 dependencies = []
+
+[project.optional-dependencies]
+# Pinned so CI == local (ruff/mypy report identically). Install with: pip install -e ".[dev]"
+dev = [
+    "ruff==0.15.0",
+    "mypy==1.19.1",
+    "pytest",
+    "pre-commit",
+]
+
+[project.urls]
+Homepage = "https://github.com/MertYakar66/Day-Trading-Bot"
+Repository = "https://github.com/MertYakar66/Day-Trading-Bot"
+
+[project.scripts]
+# After `pip install -e .` in a configured env you can run `intraday ...` directly
+# (equivalent to `python -m intraday ...`).
+intraday = "intraday.cli:main"
 
 [tool.setuptools]
 packages = ["intraday"]
@@ -36,3 +74,34 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
 ]
+
+# --------------------------------------------------------------------------
+# ruff: linting only (NOT format). The codebase has a deliberate, consistent
+# hand-formatted style; we enforce correctness rules (pyflakes/pycodestyle/
+# isort/pyupgrade/bugbear) and leave whitespace alone to avoid a churn diff.
+# --------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+# Tight, mechanical rule set: pyflakes (F), pycodestyle (E/W), import sorting (I),
+# and pyupgrade (UP). Deliberately NOT enabling opinionated/stylistic families so
+# the hand-tuned style is left alone and the gate stays unambiguous.
+select = ["E", "F", "W", "I", "UP"]
+# E501 (line-too-long) is not enforced: the codebase tolerates a few long, readable
+# lines (mostly tests/prose). line-length above still drives import-wrap formatting.
+ignore = ["E501"]
+
+# --------------------------------------------------------------------------
+# mypy: type-check the package (not the tests). ignore_missing_imports keeps the
+# un-typed scientific stack + the read-only SWE submodule from generating noise.
+# --------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+files = ["intraday"]
+exclude = "vendor"

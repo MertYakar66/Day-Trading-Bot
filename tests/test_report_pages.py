@@ -25,8 +25,8 @@ from intraday.report import (
     render_comparison,
     render_index,
     scan_directory,
+    svg,
 )
-from intraday.report import svg
 from intraday.report.theme import CSS, document
 
 GEN = "2026-06-02T12:00:00"
@@ -116,8 +116,9 @@ def test_summary_is_json_serialisable_and_faithful(runs):
 
 
 def test_summary_non_finite_becomes_null():
-    from intraday.report.export import summary_dict
     from types import SimpleNamespace as NS
+
+    from intraday.report.export import summary_dict
 
     result = NS(data_source=DataSource.IBKR, symbols=["SPY"], interval="5m",
                 n_days=0, initial_capital=100_000.0, final_equity=100_000.0)

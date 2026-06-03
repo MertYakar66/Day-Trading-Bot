@@ -1,0 +1,5 @@
+# Default owner for everything in the repo (review + merge authority).
+* @MertYakar66
+
+# The read-only SWE dependency must not be modified here — changes go upstream.
+/vendor/ @MertYakar66

@@ -11,7 +11,6 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from intraday.config import EngineConfig
 from intraday.contracts import AssetKind, GammaRegime, Side
 from intraday.features.base import FeatureRow
 from intraday.signals.s1_gamma_regime import S1GammaRegime

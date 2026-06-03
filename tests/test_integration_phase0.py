@@ -20,7 +20,6 @@ import pytest
 
 from intraday.backtest.engine import IntradayBacktester
 from intraday.config import EngineConfig
-from intraday.contracts import Verdict
 from intraday.data.synthetic import SyntheticDataProvider
 from intraday.metrics import build_report
 from intraday.signals.s3_vwap_orb import S3VwapOrb
@@ -109,7 +108,6 @@ def test_engine_halts_on_feed_gap():
     from intraday.data.provider import FeedGapError
 
     cfg = EngineConfig.default()
-    base = SyntheticDataProvider(cfg.data, cfg.session)
 
     class GappedProvider(SyntheticDataProvider):
         def get_bars(self, symbol, day, interval="1m"):

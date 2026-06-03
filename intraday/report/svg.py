@@ -488,7 +488,7 @@ def _diverging(t: float) -> str:
 
 
 def heatmap(
-    matrix: Sequence[Sequence[float]],
+    matrix: Sequence[Sequence[float | None]],
     row_labels: Sequence[str],
     col_labels: Sequence[str],
     *,
