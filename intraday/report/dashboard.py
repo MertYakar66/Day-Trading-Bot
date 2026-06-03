@@ -1,0 +1,522 @@
+"""Self-contained HTML dashboard for an intraday backtest (paper-only).
+
+Turns a finished :class:`~intraday.backtest.engine.BacktestResult` and its honesty
+:class:`~intraday.eval.stats.StrategyEval` into a **single offline HTML file**:
+KPI cards, an equity curve, an underwater drawdown, signed daily-PnL bars, a
+cost-attribution waterfall, the full honesty scorecard (clustered-t, bootstrap-CI
+Sharpe, and the multiple-testing-aware Deflated Sharpe), a trade blotter, and an
+optional cross-sectional universe section.
+
+Design rules that make this trustworthy and testable:
+
+- **No external resources.** All CSS is inlined; all charts are inline SVG
+  (:mod:`intraday.report.svg`). The file opens with no network — nothing is
+  fetched from a CDN, so it cannot silently change or phone home.
+- **Real vs SYNTHETIC is shouted, never whispered.** A synthetic run gets a loud
+  banner so a fixture can never be mistaken for a real edge — mirroring
+  :meth:`intraday.metrics.MetricsReport.render`.
+- **The verdict is the eval's, not the author's.** The headline EDGE / NO-EDGE
+  band is driven solely by ``StrategyEval.significant`` (deflated Sharpe >= 0.95).
+- **Deterministic.** Given the same data and ``generated_at`` string, the output
+  is byte-identical (no clock, no randomness inside).
+- **Escaped.** Every interpolated string (symbols, exit reasons, labels) is HTML
+  escaped — a backtest cannot inject markup into its own report.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from html import escape
+
+from ..backtest.engine import BacktestResult
+from ..eval import daily_pnl_from_result, evaluate_result
+from ..eval.stats import StrategyEval
+from ..metrics import MetricsReport, build_report
+from . import svg
+
+# --------------------------------------------------------------------------- #
+# Small formatting helpers
+# --------------------------------------------------------------------------- #
+def _money(v: float) -> str:
+    return f"${v:,.0f}" if abs(v) >= 1000 else f"${v:,.2f}"
+
+
+def _pct(v: float) -> str:
+    return f"{v:.2%}"
+
+
+def _signed_money(v: float) -> str:
+    return ("+" if v >= 0 else "−") + _money(abs(v))
+
+
+def _cls(v: float) -> str:
+    return "pos" if v >= 0 else "neg"
+
+
+def _fnum(v, fmt: str = "{:.2f}", dash: str = "—") -> str:
+    """Format a number, but render a non-finite/missing value as an em-dash instead
+    of the bare string ``"nan"`` (which a missing universe field would otherwise show)."""
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return dash
+    if x != x or x in (float("inf"), float("-inf")):
+        return dash
+    return fmt.format(x)
+
+
+def _esc(s) -> str:
+    return escape(str(s))
+
+
+# --------------------------------------------------------------------------- #
+# Section builders
+# --------------------------------------------------------------------------- #
+def _drawdown_curve(equity: Sequence[float]) -> list[float]:
+    """Underwater curve: fractional drawdown from the running peak (<= 0)."""
+    out: list[float] = []
+    peak = float("-inf")
+    for v in equity:
+        peak = max(peak, v)
+        out.append((v / peak - 1.0) if peak > 0 else 0.0)
+    return out
+
+
+def _banner(result: BacktestResult) -> str:
+    src = result.data_source
+    if src.value == "synthetic":
+        return (
+            '<div class="banner banner--synthetic">SYNTHETIC DATA &mdash; NOT A REAL '
+            "EDGE. Deterministic fixture for plumbing/causality tests only.</div>"
+        )
+    return (
+        f'<div class="banner banner--real">REAL DATA &mdash; source: '
+        f"<b>{_esc(src.value)}</b>. Net of modelled costs; paper-only (no broker "
+        "orders were placed).</div>"
+    )
+
+
+def _verdict_band(ev: StrategyEval) -> str:
+    dsr = _fnum(ev.deflated_sharpe, "{:.3f}")
+    if ev.significant:
+        return (
+            '<div class="verdict verdict--edge"><span class="verdict__tag">EDGE '
+            "(rare)</span><span class=\"verdict__detail\">Deflated Sharpe "
+            f"{dsr} &ge; 0.95 across {ev.n_trials} trial(s) &mdash; "
+            "survives the multiple-testing penalty.</span></div>"
+        )
+    return (
+        '<div class="verdict verdict--noedge"><span class="verdict__tag">NO '
+        "DEMONSTRATED EDGE</span><span class=\"verdict__detail\">Deflated Sharpe "
+        f"{dsr} &lt; 0.95 across {ev.n_trials} trial(s). The "
+        "net result is not statistically distinguishable from luck after costs.</span></div>"
+    )
+
+
+def _kpi(label: str, value: str, sub: str = "", *, cls: str = "") -> str:
+    # value/sub are escaped too (the module's invariant: nothing interpolated is raw HTML).
+    sub_html = f'<div class="kpi__sub">{_esc(sub)}</div>' if sub else ""
+    return (
+        f'<div class="kpi"><div class="kpi__label">{_esc(label)}</div>'
+        f'<div class="kpi__value {cls}">{_esc(value)}</div>{sub_html}</div>'
+    )
+
+
+def _kpi_grid(m: MetricsReport, ev: StrategyEval) -> str:
+    cards = [
+        _kpi("Net PnL", _signed_money(m.net_pnl), "after modelled costs",
+             cls=_cls(m.net_pnl)),
+        _kpi("Gross PnL", _signed_money(m.gross_pnl), "before costs",
+             cls=_cls(m.gross_pnl)),
+        _kpi("Total costs", _money(m.total_costs),
+             f"{m.cost_bps_of_notional:.1f} bps of notional", cls="neg"),
+        _kpi("Sharpe (net, ann.)", f"{m.sharpe_ratio:.2f}",
+             f"95% CI [{ev.sharpe_ann_ci_lo:.2f}, {ev.sharpe_ann_ci_hi:.2f}]",
+             cls=_cls(m.sharpe_ratio)),
+        _kpi("Max drawdown", _pct(m.max_drawdown), "peak-to-trough (net equity)",
+             cls="neg"),
+        _kpi("Win rate", f"{m.win_rate:.1%}", f"{m.total_trades} trades"),
+        _kpi("Expectancy / trade", _signed_money(m.expectancy_per_trade), "net $/trade",
+             cls=_cls(m.expectancy_per_trade)),
+        _kpi("Trading days", f"{m.n_days}",
+             f"NAV ${m.initial_capital:,.0f} → ${m.final_equity:,.0f}"),
+    ]
+    return '<div class="kpis">' + "".join(cards) + "</div>"
+
+
+def _scorecard(ev: StrategyEval) -> str:
+    rows = [
+        ("Trading-day t-stat", f"{ev.t_stat:.2f}",
+         f"p = {ev.p_value:.3f} over n = {ev.n_days} days (clustered: one observation per day)"),
+        ("Sharpe (annualised, net)", f"{ev.sharpe_ann:.2f}",
+         f"95% bootstrap CI [{ev.sharpe_ann_ci_lo:.2f}, {ev.sharpe_ann_ci_hi:.2f}] "
+         "(stationary block bootstrap)"),
+        ("Daily-PnL skew / kurtosis", f"{ev.skew:.2f} / {ev.kurtosis:.2f}",
+         "shape of the return distribution (kurtosis 3 = normal)"),
+        ("P(true Sharpe &gt; 0)", f"{ev.psr_vs_zero:.3f}",
+         "Probabilistic Sharpe Ratio vs zero (single trial)"),
+        ("Deflated Sharpe", _fnum(ev.deflated_sharpe, "{:.3f}"),
+         f"P(true Sharpe &gt; 0) after the {ev.n_trials}-trial selection penalty "
+         "(Bailey &amp; López de Prado) &mdash; edge iff &ge; 0.95"),
+    ]
+    body = "".join(
+        f'<tr><td class="sc__name">{name}</td>'
+        f'<td class="sc__val {("pos" if name.startswith("Deflated") and ev.significant else "")}">{val}</td>'
+        f'<td class="sc__note">{note}</td></tr>'
+        for name, val, note in rows
+    )
+    verdict = "EDGE" if ev.significant else "NO demonstrated edge"
+    vcls = "pos" if ev.significant else "neg"
+    return (
+        '<table class="scorecard"><thead><tr><th>Metric</th><th>Value</th>'
+        "<th>What it means</th></tr></thead><tbody>"
+        + body
+        + f'<tr class="sc__verdict"><td class="sc__name">VERDICT</td>'
+        f'<td class="sc__val {vcls}">{verdict}</td>'
+        '<td class="sc__note">the deflated Sharpe is the sole authority here</td></tr>'
+        "</tbody></table>"
+    )
+
+
+def _cost_attribution(m: MetricsReport) -> str:
+    chart = svg.waterfall(
+        [
+            ("gross", m.gross_pnl, "total"),
+            ("costs", -m.total_costs, "delta"),
+            ("net", m.net_pnl, "total"),
+        ]
+    )
+    facts = (
+        '<ul class="facts">'
+        f"<li>cost / NAV<span>{m.cost_pct_of_nav:.2%}</span></li>"
+        f"<li>cost / trade<span>{_money(m.cost_per_trade)}</span></li>"
+        f"<li>cost (bps of notional)<span>{m.cost_bps_of_notional:.1f} bps</span></li>"
+        f"<li>turnover<span>{m.turnover:.2f}× NAV/day</span></li>"
+        f"<li>profit factor<span>{m.profit_factor:.2f}</span></li>"
+        f"<li>payoff ratio<span>{m.payoff_ratio:.2f}</span></li>"
+        "</ul>"
+    )
+    return f'<div class="split"><div class="split__chart">{chart}</div>{facts}</div>'
+
+
+def _trade_blotter(result: BacktestResult, *, limit: int = 200) -> str:
+    trades = sorted(result.trades, key=lambda t: (str(t.entry_ts), t.symbol))
+    total = len(trades)
+    if total == 0:
+        return '<p class="muted">No trades were taken (the gate refused every signal).</p>'
+    shown = trades[:limit]
+
+    def _ts(ts) -> str:
+        s = str(ts)
+        return _esc(s[:16].replace("T", " "))
+
+    rows = []
+    for t in shown:
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(t.symbol)}</td><td>{_esc(t.strategy_id)}</td>"
+            f'<td class="{_cls(t.side.sign)}">{_esc(t.side.value)}</td>'
+            f"<td class=\"num\">{t.size}</td>"
+            f'<td class="num">{_ts(t.entry_ts)}</td><td class="num">{_ts(t.exit_ts)}</td>'
+            f'<td class="num">{t.entry_price:,.2f}</td><td class="num">{t.exit_price:,.2f}</td>'
+            f'<td class="num {_cls(t.gross_pnl)}">{_signed_money(t.gross_pnl)}</td>'
+            f'<td class="num neg">{_money(t.costs)}</td>'
+            f'<td class="num {_cls(t.net_pnl)}">{_signed_money(t.net_pnl)}</td>'
+            f"<td>{_esc(t.exit_reason)}</td></tr>"
+        )
+    note = (
+        f'<p class="muted">Showing first {limit} of {total} trades '
+        "(sorted by entry time).</p>"
+        if total > limit
+        else ""
+    )
+    return (
+        '<table class="blotter"><thead><tr><th>symbol</th><th>strat</th><th>side</th>'
+        "<th>size</th><th>entry</th><th>exit</th><th>entry px</th><th>exit px</th>"
+        "<th>gross</th><th>costs</th><th>net</th><th>exit reason</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + note
+    )
+
+
+def _exit_reasons(m: MetricsReport) -> str:
+    if not m.exit_reason_counts:
+        return ""
+    items = sorted(m.exit_reason_counts.items(), key=lambda kv: -kv[1])
+    total = sum(c for _, c in items) or 1
+    bars = []
+    for reason, count in items:
+        pct = count / total
+        bars.append(
+            f'<li><span class="er__label">{_esc(reason)}</span>'
+            f'<span class="er__bar"><span style="width:{pct:.1%}"></span></span>'
+            f'<span class="er__count">{count}</span></li>'
+        )
+    return '<ul class="exitreasons">' + "".join(bars) + "</ul>"
+
+
+def _universe_section(universe: Mapping) -> str:
+    """Render the cross-sectional universe eval (from scripts/eval_real_universe.py).
+
+    Defensive: renders whatever standard keys are present and skips the rest so a
+    schema tweak never breaks the dashboard."""
+    parts: list[str] = ["<h2>Cross-sectional universe</h2>"]
+    meta = []
+    for k, lab in (("n_symbols", "symbols"), ("n_days", "days"),
+                   ("n_trials", "trials"), ("var_sr", "var(SR)")):
+        if k in universe:
+            v = universe[k]
+            meta.append(f"<li>{lab}<span>{_esc(v)}</span></li>")
+    if meta:
+        parts.append('<ul class="facts facts--wide">' + "".join(meta) + "</ul>")
+
+    strategies = universe.get("strategies") or {}
+    if isinstance(strategies, Mapping) and strategies:
+        head = (
+            "<tr><th>strategy</th><th>net $</th><th>Sharpe</th><th>t</th>"
+            "<th>P(SR&gt;0)</th><th>DSR</th><th>OOS test Sharpe</th></tr>"
+        )
+        body = []
+        for name, s in sorted(strategies.items()):  # sorted => deterministic order
+            if not isinstance(s, Mapping):
+                continue
+            net = s.get("book_net", s.get("total_net", 0.0))
+            dsr = s.get("dsr_vs_all_trials", s.get("dsr_vs_strategies", 0.0))
+            body.append(
+                "<tr>"
+                f"<td>{_esc(name)}</td>"
+                f'<td class="num {_cls(net)}">{_signed_money(net)}</td>'
+                f'<td class="num {_cls(s.get("sharpe_ann", 0.0))}">{_fnum(s.get("sharpe_ann", 0.0))}</td>'
+                f'<td class="num">{_fnum(s.get("t_stat", 0.0))}</td>'
+                f'<td class="num">{_fnum(s.get("psr_vs_zero", 0.0), "{:.3f}")}</td>'
+                f'<td class="num">{_fnum(dsr, "{:.3f}")}</td>'
+                f'<td class="num">{_fnum(s.get("test_sharpe_ann"))}</td>'
+                "</tr>"
+            )
+        parts.append(
+            '<table class="scorecard"><thead>' + head + "</thead><tbody>"
+            + "".join(body) + "</tbody></table>"
+        )
+
+    # Optional per-symbol x per-strategy Sharpe heatmap (additive key).
+    ps = universe.get("per_symbol")
+    if isinstance(ps, Mapping) and ps:
+        strat_names = sorted(ps.keys())  # sorted => deterministic rows
+        symbols: list[str] = []
+        for s in strat_names:
+            for sym in (ps[s] if isinstance(ps[s], Mapping) else {}):
+                if sym not in symbols:
+                    symbols.append(sym)
+        symbols.sort()
+        matrix = [
+            [ps[s].get(sym) if isinstance(ps[s], Mapping) else None for sym in symbols]
+            for s in strat_names
+        ]
+        parts.append("<h3>Per-symbol Sharpe (annualised, net)</h3>")
+        parts.append(
+            '<div class="scroll-x">'
+            + svg.heatmap(matrix, strat_names, symbols)
+            + "</div>"
+        )
+
+    best = universe.get("best_trial")
+    if isinstance(best, Mapping) and best:
+        parts.append(
+            '<p class="muted">Best single trial of '
+            f'{_esc(universe.get("n_trials", "?"))}: '
+            f'<b>{_esc(best.get("strategy", "?"))}/{_esc(best.get("symbol", "?"))}</b> '
+            f'Sharpe {_fnum(best.get("sharpe_ann", 0.0))}, t {_fnum(best.get("t_stat", 0.0))}, '
+            f'net {_signed_money(best.get("total_net", 0.0))}, '
+            f'DSR {_fnum(best.get("deflated_sharpe", 0.0), "{:.3f}")} '
+            "(a best-of-N pick is expected to look good by luck — the DSR is the honest read).</p>"
+        )
+    return '<section class="card">' + "".join(parts) + "</section>"
+
+
+# --------------------------------------------------------------------------- #
+# CSS (inlined; no external stylesheet)
+# --------------------------------------------------------------------------- #
+_CSS = """
+:root{--bg:#0d1117;--card:#161b22;--card2:#1c222b;--bd:#2b3140;--fg:#e6edf3;
+--mut:#9aa4b2;--pos:#3fb950;--neg:#f85149;--acc:#4f9cff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 64px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 14px;
+border-bottom:1px solid var(--bd);padding-bottom:8px}
+h3{font-size:13px;margin:18px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.sub{color:var(--mut);margin:0 0 18px;font-size:13px}
+.pos{color:var(--pos)}.neg{color:var(--neg)}.muted{color:var(--mut);font-size:12.5px}
+.banner{padding:10px 14px;border-radius:8px;margin:0 0 18px;font-size:13px;font-weight:600}
+.banner--synthetic{background:rgba(248,81,73,.12);border:1px solid var(--neg);color:#ffb3ae}
+.banner--real{background:rgba(63,185,80,.10);border:1px solid var(--pos);color:#9be8a8}
+.verdict{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:10px;
+margin:0 0 22px;flex-wrap:wrap}
+.verdict--edge{background:rgba(63,185,80,.10);border:1px solid var(--pos)}
+.verdict--noedge{background:rgba(248,81,73,.08);border:1px solid var(--neg)}
+.verdict__tag{font-size:20px;font-weight:800;letter-spacing:.02em}
+.verdict--edge .verdict__tag{color:var(--pos)}.verdict--noedge .verdict__tag{color:var(--neg)}
+.verdict__detail{color:var(--mut);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:0 0 24px}
+@media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:13px 14px}
+.kpi__label{color:var(--mut);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+.kpi__value{font-size:21px;font-weight:700;margin:3px 0 2px}
+.kpi__sub{color:var(--mut);font-size:11.5px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;
+padding:18px 20px;margin:0 0 22px}
+.chart{display:block;margin:4px 0}
+.split{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:center}
+@media(max-width:760px){.split{grid-template-columns:1fr}}
+.facts{list-style:none;margin:0;padding:0}
+.facts li{display:flex;justify-content:space-between;padding:6px 0;
+border-bottom:1px solid var(--bd);font-size:13px}
+.facts li span{font-weight:700}
+.facts--wide{display:grid;grid-template-columns:repeat(4,1fr);gap:0 18px}
+@media(max-width:760px){.facts--wide{grid-template-columns:repeat(2,1fr)}}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+.scorecard td,.scorecard th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--bd)}
+.scorecard th{color:var(--mut);font-weight:600;font-size:11.5px;text-transform:uppercase}
+.sc__name{font-weight:600}.sc__val{font-weight:700;white-space:nowrap}
+.sc__note{color:var(--mut);font-size:12px}
+.sc__verdict td{border-top:2px solid var(--bd);font-size:13px}
+.blotter{font-variant-numeric:tabular-nums}
+.blotter td,.blotter th{padding:5px 8px;border-bottom:1px solid var(--bd)}
+.blotter th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;position:sticky;top:0;background:var(--card)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.scroll-y{max-height:420px;overflow:auto;border:1px solid var(--bd);border-radius:8px}
+.scroll-x{overflow-x:auto}
+.exitreasons{list-style:none;margin:8px 0 0;padding:0}
+.exitreasons li{display:grid;grid-template-columns:140px 1fr 44px;gap:10px;align-items:center;
+padding:4px 0;font-size:12.5px}
+.er__bar{background:var(--card2);border-radius:4px;height:10px;overflow:hidden}
+.er__bar span{display:block;height:100%;background:var(--acc)}
+.er__count{text-align:right;color:var(--mut)}
+.foot{color:var(--mut);font-size:12px;margin-top:8px;border-top:1px solid var(--bd);padding-top:14px}
+.foot code{background:var(--card2);padding:1px 5px;border-radius:4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+"""
+
+
+# --------------------------------------------------------------------------- #
+# Public API
+# --------------------------------------------------------------------------- #
+def render_dashboard(
+    result: BacktestResult,
+    metrics: MetricsReport,
+    ev: StrategyEval,
+    *,
+    title: str = "Intraday engine — backtest dashboard",
+    generated_at: str | None = None,
+    universe: Mapping | None = None,
+    run_meta: Mapping | None = None,
+) -> str:
+    """Render the full HTML document from a result, its metrics, and its eval."""
+    equity = [float(r["portfolio_value"]) for r in result.equity_curve]
+    dates = [str(r["date"])[:10] for r in result.equity_curve]
+    daily = daily_pnl_from_result(result)
+    daily_vals = [float(v) for v in daily.to_numpy()] if len(daily) else []
+    daily_dates = [str(d)[:10] for d in daily.index] if len(daily) else []
+    dd = _drawdown_curve(equity)
+
+    rm = run_meta or {}
+    meta_bits = [
+        f"symbols <b>{_esc(', '.join(result.symbols))}</b>",
+        f"interval <b>{_esc(result.interval)}</b>",
+        f"strategies <b>{_esc(rm.get('strategies', '—'))}</b>",
+        f"window <b>{_esc(rm.get('start', dates[0] if dates else '?'))} "
+        f"→ {_esc(rm.get('end', dates[-1] if dates else '?'))}</b>",
+    ]
+
+    equity_chart = svg.line_chart(
+        equity, baseline=result.initial_capital, labels=dates,
+        value_fmt=lambda v: f"${v:,.0f}",
+    )
+    dd_chart = svg.area_chart(dd, labels=dates, value_fmt=lambda v: f"{v:.1%}")
+    pnl_chart = svg.bar_chart(daily_vals, labels=daily_dates, value_fmt=lambda v: f"${v:,.0f}")
+
+    universe_html = _universe_section(universe) if universe else ""
+
+    gen = _esc(generated_at) if generated_at else "—"
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{_esc(title)}</title>
+<style>{_CSS}</style></head>
+<body><div class="wrap">
+<h1>{_esc(title)}</h1>
+<p class="sub">{' &middot; '.join(meta_bits)} &middot; generated {gen}</p>
+{_banner(result)}
+{_verdict_band(ev)}
+{_kpi_grid(metrics, ev)}
+
+<section class="card">
+<h2>Equity curve (net of costs)</h2>
+{equity_chart}
+</section>
+
+<div class="grid2">
+<section class="card">
+<h2>Drawdown (underwater)</h2>
+{dd_chart}
+</section>
+<section class="card">
+<h2>Daily PnL</h2>
+{pnl_chart}
+</section>
+</div>
+
+<section class="card">
+<h2>Honesty scorecard</h2>
+{_scorecard(ev)}
+</section>
+
+<section class="card">
+<h2>Cost attribution</h2>
+{_cost_attribution(metrics)}
+</section>
+
+<section class="card">
+<h2>Exit reasons</h2>
+{_exit_reasons(metrics) or '<p class="muted">No closed trades.</p>'}
+</section>
+
+{universe_html}
+
+<section class="card">
+<h2>Trade blotter</h2>
+<div class="scroll-y">{_trade_blotter(result)}</div>
+</section>
+
+<p class="foot">
+Paper-only research artifact. Every figure is net of modelled transaction costs unless
+labelled gross. The EDGE / NO-EDGE verdict is driven solely by the Deflated Sharpe Ratio
+(Bailey &amp; L&oacute;pez de Prado), which penalises selection across
+<code>n_trials={_esc(ev.n_trials)}</code> trials. No broker orders were placed; no live
+account was modified. Charts are inline SVG with no external resources &mdash; this file
+renders fully offline.
+</p>
+</div></body></html>
+"""
+
+
+def build_dashboard(
+    result: BacktestResult,
+    *,
+    n_trials: int = 1,
+    title: str = "Intraday engine — backtest dashboard",
+    generated_at: str | None = None,
+    universe: Mapping | None = None,
+    run_meta: Mapping | None = None,
+) -> str:
+    """Convenience: compute the metrics + honesty eval, then render the dashboard."""
+    metrics = build_report(result)
+    ev = evaluate_result(result, n_trials=n_trials)
+    return render_dashboard(
+        result, metrics, ev, title=title, generated_at=generated_at,
+        universe=universe, run_meta=run_meta,
+    )
