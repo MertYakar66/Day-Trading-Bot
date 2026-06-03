@@ -66,14 +66,20 @@ def test_feed_gap_boundary():
 # Engine daily kill-switch latch
 # --------------------------------------------------------------------------- #
 def test_engine_daily_kill_switch_latches():
-    """With a tiny daily loss budget, the first losing trade latches the kill-switch
-    and subsequent same-day signals are BLOCKED with the kill-switch in their trail."""
+    """With a near-zero daily loss budget, the first realized cost breaches it and the
+    kill-switch latches, so subsequent same-day signals carry it in their trail.
+
+    The budget ($0.10) is set far below any single trade's transaction cost, so a
+    breach is virtually certain once *any* trade closes — the test guards that a
+    trade actually occurred so it fails loudly rather than silently if it doesn't."""
     from dataclasses import replace
     cfg = EngineConfig.default()
-    cfg = replace(cfg, risk=replace(cfg.risk, daily_loss_limit_pct=0.0001))  # ~$10 budget
+    cfg = replace(cfg, risk=replace(cfg.risk, daily_loss_limit_pct=1e-6))  # ~$0.10 budget
     result = _run(["SPY"], date(2026, 5, 4), date(2026, 5, 6), edge=0.5, entry_z=0.1, cfg=cfg)
-    assert result.signals, "expected the strategy to generate signals"
-    assert any("daily_kill_switch" in s["trail"] for s in result.signals)
+    assert result.trades, "precondition: the strategy must take at least one trade"
+    assert result.signals, "precondition: the strategy must generate signals"
+    latched = [s for s in result.signals if "daily_kill_switch" in s["trail"]]
+    assert latched, "kill-switch never appeared in any signal trail despite a breached budget"
 
 
 # --------------------------------------------------------------------------- #
