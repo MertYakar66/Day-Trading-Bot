@@ -9,6 +9,7 @@
 body{margin:0;background:var(--bg);color:var(--fg);
 font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 64px}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 14px;
 border-bottom:1px solid var(--bd);padding-bottom:8px}
 h3{font-size:13px;margin:18px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
@@ -63,6 +64,26 @@ padding:4px 0;font-size:12.5px}
 .foot code{background:var(--card2);padding:1px 5px;border-radius:4px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+/* legend (shared by multi-series charts) */
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 2px;font-size:12.5px;color:var(--mut)}
+.legend__item{display:flex;align-items:center;gap:6px}
+.legend__swatch{width:11px;height:11px;border-radius:3px;display:inline-block}
+/* comparison table */
+.cmp td,.cmp th{padding:8px 10px;border-bottom:1px solid var(--bd);text-align:right;white-space:nowrap}
+.cmp th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase}
+.cmp td:first-child,.cmp th:first-child{text-align:left}
+.cmp tr.cmp-best{background:rgba(63,185,80,.07)}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700}
+.badge--edge{background:rgba(63,185,80,.15);color:var(--pos);border:1px solid var(--pos)}
+.badge--noedge{background:rgba(248,81,73,.12);color:var(--neg);border:1px solid var(--neg)}
+.badge--synthetic{background:rgba(248,81,73,.10);color:#ffb3ae;border:1px solid var(--neg)}
+.badge--real{background:rgba(63,185,80,.10);color:#9be8a8;border:1px solid var(--pos)}
+/* index page */
+.idx{list-style:none;margin:0;padding:0}
+.idx li{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;
+padding:11px 4px;border-bottom:1px solid var(--bd)}
+.idx .idx__title{font-weight:600}
+.idx .idx__meta{color:var(--mut);font-size:12px}
 </style></head>
 <body><div class="wrap">
 <h1>Intraday engine — SAMPLE dashboard (synthetic)</h1>

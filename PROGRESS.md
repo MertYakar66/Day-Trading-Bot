@@ -6,6 +6,45 @@
 
 ---
 
+## Session 2026-06-02 — Report suite: comparison, index, JSON (feat/report-suite)
+
+Autonomous session. Extended the dashboard into a small **report suite** and did a
+review/optimization pass on the existing module.
+
+### What shipped
+
+- `intraday/report/theme.py` — extracted the shared **CSS + `document()` shell**
+  out of `dashboard.py` (was locked inside it). One stylesheet, one document
+  wrapper, reused by every page — DRY and visually consistent.
+- `intraday/report/svg.py` — new **`multi_line_chart`** (overlay N series) +
+  `SERIES_PALETTE`; robust to uneven lengths and NaN/inf.
+- `intraday/report/comparison.py` — **`build_comparison`**: S3/S4/S5 (or any subset)
+  on one page — normalised equity curves overlaid (cumulative % return) with a
+  matching legend, plus a ranked metrics table (best Sharpe highlighted). Comparing
+  N strategies = N trials, so each Deflated Sharpe carries that penalty.
+- `intraday/report/index_page.py` — **`build_index`**: a static index linking every
+  report in a directory; titles pulled via a stdlib `HTMLParser` (robust to
+  attributes/entities/nesting), excludes itself.
+- `intraday/report/export.py` — **`build_summary`/`summary_dict`**: a machine-readable
+  JSON sibling of the dashboard (non-finite -> null, JSON-safe; verdict ties to
+  `significant`).
+- `intraday/cli.py` — new **`compare`** and **`report-index`** subcommands; **`--emit-json`**
+  on `report`/`compare`; shared `_write_html` helper.
+- `tests/test_report_pages.py` (+ additions to `test_report.py`) — comparison overlay
+  /ranking/escaping/determinism, JSON faithfulness + non-finite safety, index title
+  extraction (incl. nested/malformed) + round-trip, multi-line robustness, CLI smoke.
+- `docs/sample_{dashboard,comparison,index}.html` — pre-rendered illustrative examples.
+
+### Review / fixes
+
+Adversarial multi-agent review (52 findings, mostly confirmed-positive). One real
+HIGH bug fixed: `_extract_title` used `str.find` and leaked literal markup on
+nested/malformed `<title>` — replaced with an `HTMLParser`. Added the missing
+coverage the review flagged (cost-attribution, exit-reasons, SVG-primitive edge
+cases, title round-trip). Full suite: **419 passed** (was 378). `main` releasable.
+
+---
+
 ## Session 2026-06-02 — Self-contained HTML dashboard (feat/html-dashboard)
 
 Autonomous session. Goal: a genuinely useful operator utility on top of the
