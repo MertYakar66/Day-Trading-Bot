@@ -49,6 +49,55 @@ def test_canonical_schemas():
         assert (tdf["net_pnl"] - (tdf["gross_pnl"] - tdf["costs"])).abs().max() < 1e-6
 
 
+def test_live_hooks_accumulate_equity_and_match_from_backtest():
+    """Drive the live-mode hooks tick-by-tick (the path a real streaming loop would
+    use) and assert the running equity + equity_curve are correct AND identical to a
+    from_backtest ledger built over the same records — i.e. live and backtest book
+    the same way (DESIGN §8)."""
+    from types import SimpleNamespace
+
+    import pandas as pd
+
+    from intraday.contracts import AssetKind, Fill, Side, Trade
+
+    def _fill(ts, kind, price):
+        return Fill(ts=pd.Timestamp(ts, tz="UTC"), symbol="SPY", side=Side.LONG,
+                    size=10, price=price, kind=kind, cost=0.5)
+
+    def _trade(entry, exit_, net):
+        return Trade(symbol="SPY", strategy_id="s3", side=Side.LONG, size=10,
+                     instrument=AssetKind.STOCK,
+                     entry_ts=pd.Timestamp(entry, tz="UTC"), exit_ts=pd.Timestamp(exit_, tz="UTC"),
+                     entry_price=100.0, exit_price=100.0 + net / 10.0,
+                     gross_pnl=net + 1.0, costs=1.0, net_pnl=net, exit_reason="target")
+
+    led = PaperLedger(100_000.0)
+    led.log_signal({"as_of": "2026-05-04T14:00:00+00:00", "symbol": "SPY"})
+    led.log_open(_fill("2026-05-04 14:00", "OPEN", 100.0))           # day 1: +250 net
+    led.log_close(_trade("2026-05-04 14:00", "2026-05-04 15:00", 250.0),
+                  _fill("2026-05-04 15:00", "CLOSE", 125.0))
+    led.mark_day_end(date(2026, 5, 4))
+    led.log_open(_fill("2026-05-05 14:00", "OPEN", 100.0))           # day 2: -100 net
+    led.log_close(_trade("2026-05-05 14:00", "2026-05-05 15:00", -100.0),
+                  _fill("2026-05-05 15:00", "CLOSE", 90.0))
+    led.mark_day_end(date(2026, 5, 5))
+
+    assert led.equity == pytest.approx(100_000.0 + 250.0 - 100.0)
+    assert [r["portfolio_value"] for r in led.equity_curve] == [
+        pytest.approx(100_250.0), pytest.approx(100_150.0)
+    ]
+    assert len(led.fills) == 4 and len(led.trades) == 2 and len(led.signals) == 1
+
+    # The same records via from_backtest book identically (live == backtest accounting).
+    result = SimpleNamespace(
+        initial_capital=100_000.0, final_equity=led.equity, signals=led.signals,
+        fills=led.fills, trades=led.trades, equity_curve=led.equity_curve,
+    )
+    mirror = PaperLedger.from_backtest(result)
+    assert mirror.equity == pytest.approx(led.equity)
+    assert mirror.equity_curve == led.equity_curve
+
+
 def test_persist_round_trip(store):
     result = _backtest()
     led = PaperLedger.from_backtest(result)
