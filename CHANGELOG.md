@@ -4,6 +4,43 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Post-0.1.0 hardening from a second audit pass (no version bump yet; the **NO-EDGE
+headline is unchanged**). Tests 487 → 517.
+
+### Fixed
+- **Packaging (shipping defect)**: the wheel shipped only the top-level modules
+  (`packages = ["intraday"]`), dropping every subpackage — a clean `pip install`'d
+  `intraday` console script crashed on the first import. Switched to setuptools
+  auto-discovery; CI now builds the wheel and smoke-imports every subpackage + the
+  entry point from outside the source tree.
+- **No-data honesty**: a zero-trading-day run (reversed dates / un-ingested store) no
+  longer prints "NO demonstrated edge" and exits 0 — `backtest`/`report`/`compare`
+  warn on stderr, exit non-zero, and suppress the verdict (and write no misleading
+  HTML). The dashboard shows an INSUFFICIENT DATA band (not NO-EDGE) when `n_days < 2`.
+- **Windows console**: the synthetic-data banner used em-dashes that rendered as
+  mojibake on cp1252; now ASCII (with a runtime-output ASCII test).
+- **Parity provenance**: the put-call-parity underlying path enforces a grid
+  `min_coverage` floor (0.8) before forward-filling, so a heavily-reconstructed
+  session is never mislabelled solid `[REAL DATA: parity]`.
+
+### Added
+- Eval honesty disclosures: an i.i.d. serial-dependence caveat (the stationary
+  bootstrap CI is named as the short-range-robust counterweight) and a small-`n_trials`
+  caveat on a green EDGE verdict.
+- Tests for `sigma_stop_target`, OOS split bounds + rolling walk-forward, DSR `var_sr`
+  monotonicity, and the live paper-ledger `log_*` hooks.
+
+### Changed
+- `doctor` verifies the core scientific stack (numpy/pandas/scipy/pyarrow); duplicate
+  `--strategy` keys are de-duped; chart money formatting matches the KPI convention
+  (minus before the `$`).
+- Docs: `THETA_TIER_PROBE.md` marked superseded/scoped with the adapter's actual
+  behaviour (`DataUnavailable` / `ThetaNotConnectedThisSession`, not a blanket
+  `TierUnavailable`); test counts and the S4/S5/OOS figures synced to the committed
+  eval JSON.
+
 ## [0.1.0] - 2026-06-03
 
 First tagged, launch-ready release of the paper-only intraday research engine.

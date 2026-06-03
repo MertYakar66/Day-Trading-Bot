@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-02 · **Status:** Phase 0 + Phase 1 complete; real-data path wired
 (IBKR + Yahoo underlying); powered, multiple-testing-honest real-data evaluation
-run. 356 tests passing. · **Verdict: on 24 symbols × 59 real 5-min sessions, net of
+run. 517 tests passing (lint + type-checked; v0.1.0 launch-readiness pass). · **Verdict: on 24 symbols × 59 real 5-min sessions, net of
 costs, NO underlying-only strategy (reversion/breakout/momentum) shows an edge —
 all deflated-Sharpe ≈ 0, OOS fails. The engine reports the truth, not a fabricated
 edge.** See §0.
@@ -77,7 +77,8 @@ metrics**, with three strategies behind the one gate and a paper ledger:
 
 **One documented command** (prints a NET-of-costs report):
 `python -m intraday backtest --start 2026-05-01 --end 2026-05-29`
-(`--strategy {s1,s2,s3}` selects strategies; default S3.)
+(`--strategy {s1,s2,s3,s4,s5}` selects strategies; default S3. Run
+`python -m intraday strategies` for the full list.)
 
 ## 2. Results — NET OF COSTS (synthetic; harness validation, NOT an edge)
 
