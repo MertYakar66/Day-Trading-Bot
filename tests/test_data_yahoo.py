@@ -14,7 +14,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from intraday.config import EngineConfig
 from intraday.contracts import BAR_COLUMNS, DataSource
 from intraday.data.provider import DataUnavailable
 from intraday.data.quality import assert_no_feed_gap

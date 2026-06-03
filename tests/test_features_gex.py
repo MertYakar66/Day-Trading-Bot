@@ -8,7 +8,6 @@ deterministic synthetic option chain. They require the SWE
 from __future__ import annotations
 
 import math
-from datetime import date
 
 import pandas as pd
 import pytest

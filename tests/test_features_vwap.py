@@ -8,7 +8,6 @@ provider only). No SWE modules are imported here.
 from __future__ import annotations
 
 import math
-from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -17,7 +16,6 @@ import pytest
 from intraday.features.opening_range import OpeningRange, opening_range
 from intraday.features.vwap import vwap_bands, vwap_frame
 from intraday.timeutils import session_bounds_utc
-
 
 # --------------------------------------------------------------------------- #
 # vwap_frame

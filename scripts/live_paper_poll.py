@@ -18,8 +18,6 @@ import os
 import sys
 from datetime import date
 
-import pandas as pd
-
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _p in (_ROOT, os.path.join(_ROOT, "vendor", "swe")):
     if _p not in sys.path:

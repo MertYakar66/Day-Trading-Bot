@@ -22,23 +22,24 @@ loss kill-switch that latches for the rest of the session.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 
 import numpy as np
 import pandas as pd
 
+from ..authority.gate import ExpectancyGate
+from ..authority.reviewers import ReviewContext, ReviewerPipeline, default_reviewers
 from ..config import EngineConfig
 from ..contracts import (
-    AssetKind,
     DataSource,
     Fill,
+    GammaRegime,
     Position,
     Side,
     Trade,
-    Verdict,
 )
-from ..data.provider import DataProvider, asset_kind_for
+from ..data.provider import DataProvider
 from ..data.quality import assert_finite_bars, assert_no_feed_gap
 from ..features.base import FeatureRow
 from ..features.gex import gamma_structure_at
@@ -46,13 +47,10 @@ from ..features.ofi import ofi_at
 from ..features.pipeline import FeaturePipeline
 from ..features.realized_vol import intraday_rv
 from ..features.vrp import atm_iv_at
-from ..contracts import GammaRegime
 from ..logging_config import get_logger
 from ..risk.sizing import kelly_size
 from ..signals.base import Strategy
 from ..timeutils import flatten_time_utc
-from ..authority.gate import ExpectancyGate
-from ..authority.reviewers import ReviewContext, ReviewerPipeline, default_reviewers
 from .fills import conservative_fill
 
 logger = get_logger(__name__)
@@ -237,9 +235,10 @@ class IntradayBacktester:
                     reason = "settle_inside" if inside else "settle_outside"
                     fill_price = close_now
                 else:
-                    reason = self._exit_reason(pos, d, i, ts, flatten_at)
-                    if reason is None:
+                    exit_reason = self._exit_reason(pos, d, i, ts, flatten_at)
+                    if exit_reason is None:
                         continue
+                    reason = exit_reason
                     fill_price, exit_cost, fill_ts = self._exit_fill(pos, d, i, index, n)
                     gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
                     costs = pos.entry_cost + exit_cost

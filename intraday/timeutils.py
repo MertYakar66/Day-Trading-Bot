@@ -11,7 +11,7 @@ path would use the venue's official calendar.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 
 import pandas as pd
 
@@ -62,7 +62,6 @@ def is_trading_day(day: date) -> bool:
 def trading_days(start: date, end: date) -> list[date]:
     """Inclusive list of RTH trading days in ``[start, end]``."""
     out: list[date] = []
-    cur = start
     one = pd.Timedelta(days=1)
     cur_ts = pd.Timestamp(start)
     end_ts = pd.Timestamp(end)

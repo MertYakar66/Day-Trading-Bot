@@ -19,7 +19,7 @@ flip, walls, and OFI all come from the PIT feature row.
 from __future__ import annotations
 
 from ..config import EngineConfig
-from ..contracts import AssetKind, GammaRegime, SignalProposal, Side
+from ..contracts import AssetKind, GammaRegime, Side, SignalProposal
 from ..data.provider import asset_kind_for
 from ..features.base import FeatureRow
 
@@ -87,6 +87,9 @@ class S1GammaRegime:
 
         if side is None:
             return None
+        # side/target/stop are always assigned together above; assert so the type
+        # checker (and a reader) knows target/stop are non-None past this point.
+        assert target is not None and stop is not None
         # Guard valid geometry (reward and risk strictly positive on the right side).
         reward = abs(target - ref)
         risk = abs(ref - stop)

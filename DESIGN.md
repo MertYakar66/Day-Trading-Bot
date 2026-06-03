@@ -1,7 +1,8 @@
 # Intraday Engine — Design
 
-> **Status:** design agreed; build not started. This is the standalone repo for
-> the project — `DESIGN.md` is the plan the build (see `TASKS.md`) follows.
+> **Status:** Phase 0 + Phase 1 built, green, and launch-ready (see `CHANGELOG.md` /
+> `PROGRESS.md`). This document is the spec the build followed; the implementation lives
+> in the `intraday/` package (`docs/ARCHITECTURE.md` maps it).
 >
 > **What this is:** a *separate* intraday ("day-trading") decision engine. It is
 > its own product, distinct from the Smart Wheel Engine (SWE), and reuses SWE's

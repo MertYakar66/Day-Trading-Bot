@@ -12,11 +12,9 @@ earlier time. We prove this two ways:
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from intraday.config import EngineConfig
 from intraday.features.base import latest_value
 from intraday.features.ofi import ofi_at
 from intraday.features.pipeline import FeaturePipeline

@@ -28,7 +28,7 @@ from __future__ import annotations
 import math
 
 from ..config import EngineConfig
-from ..contracts import AssetKind, CostBreakdown, SignalProposal, Side
+from ..contracts import AssetKind, CostBreakdown, Side, SignalProposal
 from ..costs import round_trip_cost
 from ..features.base import FeatureRow
 from ..timeutils import session_bounds_utc

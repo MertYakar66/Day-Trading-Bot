@@ -80,7 +80,7 @@ class UrllibYahooClient:
             f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
             f"?range={rng}&interval={interval}&includePrePost=false"
         )
-        last = None
+        last: Exception | None = None
         for attempt in range(self.retries):
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": _UA})

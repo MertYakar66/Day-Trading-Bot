@@ -36,10 +36,10 @@ for _p in (_ROOT, os.path.join(_ROOT, "vendor", "swe")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from intraday.authority.reviewers import default_reviewers  # noqa: E402
 from intraday.backtest.engine import IntradayBacktester  # noqa: E402
 from intraday.config import EngineConfig  # noqa: E402
 from intraday.contracts import DataSource  # noqa: E402
-from intraday.authority.reviewers import default_reviewers  # noqa: E402
 from intraday.data.store import ParquetStore  # noqa: E402
 from intraday.data.store_provider import StoreBackedProvider  # noqa: E402
 from intraday.eval import (  # noqa: E402

@@ -1,8 +1,8 @@
 name: ci
 
-# Keeps `main` releasable: the full pytest suite (incl. the SWE-dependent quant
-# adapters) must pass. All tests are network-free and use synthetic data only —
-# no Theta, no broker.
+# Keeps `main` releasable: lint + type-check, then the full pytest suite (incl. the
+# SWE-dependent quant adapters) across supported Python versions. Everything is
+# network-free and uses synthetic data only — no Theta, no broker.
 
 on:
   push:
@@ -11,8 +11,28 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4   # no submodule needed: ruff lints, mypy ignores missing imports
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install lint tools (pinned to match local/pre-commit)
+        run: pip install ruff==0.15.0 mypy==1.19.1
+      - name: Ruff (lint)
+        run: ruff check intraday tests scripts
+      - name: Mypy (type-check the package)
+        run: mypy
+
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - name: Checkout (with vendor/swe submodule)
         uses: actions/checkout@v4
@@ -26,10 +46,14 @@ jobs:
           token: ${{ secrets.SWE_SUBMODULE_TOKEN || github.token }}
           fetch-depth: 0
 
-      - name: Set up Python
+      # NB: deliberately NOT caching vendor/swe. The checkout above already fetches the
+      # submodule at its pinned commit every run; a cache keyed on .gitmodules (which
+      # does not contain the pinned SHA) would serve a STALE tree after a submodule bump.
+
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install dependencies

@@ -1,0 +1,19 @@
+Copyright (c) 2026 Mert Yakar. All rights reserved.
+
+This software and its source code (the "Software") are proprietary and
+confidential. No licence, right, or permission is granted to any person to use,
+copy, modify, merge, publish, distribute, sublicense, or sell copies of the
+Software, in whole or in part, without the prior written permission of the
+copyright holder.
+
+THE SOFTWARE IS A PAPER-ONLY RESEARCH ARTIFACT. It is provided "AS IS", without
+warranty of any kind, express or implied, including but not limited to the
+warranties of merchantability, fitness for a particular purpose, and
+noninfringement. Nothing in the Software constitutes financial advice, and the
+copyright holder accepts no liability for any trading losses or other damages
+arising from its use.
+
+NOTE: This is a deliberately conservative default that preserves every option.
+To make the project open source, replace this file with the text of an OSI
+licence (e.g. MIT or Apache-2.0), update the `license` field and the License
+classifier in pyproject.toml, and note the change in CHANGELOG.md.

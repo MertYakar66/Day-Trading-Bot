@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from datetime import date, time
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -26,7 +25,6 @@ from intraday.config import CostConfig, EngineConfig, GateConfig, RiskConfig, Se
 from intraday.contracts import BarSeries, DataSource
 from intraday.data.provider import DataProvider, DataUnavailable
 from intraday.data.quality import assert_finite_bars, spread_bps
-from intraday.data.store import ParquetStore
 from intraday.data.synthetic import SyntheticDataProvider
 from intraday.features.base import FeatureRow
 from intraday.report import svg

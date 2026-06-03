@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .backtest.engine import IntradayBacktester
+from .backtest.engine import BacktestResult, IntradayBacktester
 from .config import DEFAULT_SYMBOLS, EngineConfig
 from .contracts import DataSource
 from .data.store import ParquetStore
@@ -195,7 +195,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         "start": args.start.isoformat(), "end": args.end.isoformat(),
         "strategies": " ".join(args.strategy),
     }
-    runs: list[tuple[str, object]] = []
+    runs: list[tuple[str, BacktestResult]] = []
     for name in args.strategy:
         strat = _build_strategies([name], args.edge, args.entry_z, args.stop_k)
         bt = IntradayBacktester(cfg, provider, strat)
@@ -298,8 +298,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     # 2) SWE dependency (read-only) — importing only defines classes, no socket.
     try:
-        import engine.transaction_costs  # noqa: F401
         import backtests.simulator  # noqa: F401
+        import engine.transaction_costs  # noqa: F401
         lines.append(" [ok ] vendor/swe importable (engine.*, backtests.simulator)")
     except Exception as e:
         ok = False

@@ -41,7 +41,7 @@ class Verdict(IntEnum):
     REVIEW = 2
     PROCEED = 3
 
-    def downgraded_to(self, other: "Verdict") -> "Verdict":
+    def downgraded_to(self, other: Verdict) -> Verdict:
         """Return the more-restrictive of the two — a reviewer can never upgrade."""
         return Verdict(min(int(self), int(other)))
 
@@ -259,7 +259,7 @@ class SignalProposal:
     # Defined-risk overrides (None ⇒ directional, derive from price geometry):
     win_amount: float | None = None   # gross $ gain per unit if it wins
     loss_amount: float | None = None  # gross $ loss per unit if it loses (>= 0)
-    cost_override: "CostBreakdown | None" = None  # explicit round-trip cost ($/unit-set)
+    cost_override: CostBreakdown | None = None  # explicit round-trip cost ($/unit-set)
     meta: Mapping = field(default_factory=dict)
 
     @property
@@ -337,7 +337,7 @@ class GateResult:
     def tradeable(self) -> bool:
         return self.verdict is Verdict.PROCEED
 
-    def with_downgrade(self, verdict: Verdict, reason: str) -> "GateResult":
+    def with_downgrade(self, verdict: Verdict, reason: str) -> GateResult:
         """Return a copy downgraded to ``verdict`` (never upgraded), recording
         ``reason`` in the trail. A no-op if ``verdict`` is not more restrictive.
         """
