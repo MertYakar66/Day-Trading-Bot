@@ -20,19 +20,21 @@ import pytest
 
 from intraday.config import EngineConfig
 from intraday.contracts import CHAIN_COLUMNS, TAPE_COLUMNS, DataSource, OptionChainSeries
+from intraday.data.chain_synthesis import (
+    PER_SYMBOL_Q,
+    SynthStats,
+    consumer_T,
+    quotes_to_parity_frame,
+    synthesize_chain,
+    validate_same_day_expiry,
+)
 from intraday.data.ibkr import ingest_payload
 from intraday.data.store import ParquetStore
 from intraday.timeutils import bar_close_index, session_bounds_utc
 from scripts.ingest_theta_options import (
-    PER_SYMBOL_Q,
-    SynthStats,
-    consumer_T,
     ingest_parity_bars,
     ingest_tape,
     prev_session_oi,
-    quotes_to_parity_frame,
-    synthesize_chain,
-    validate_same_day_expiry,
 )
 
 pytestmark = pytest.mark.swe
@@ -141,9 +143,11 @@ def test_available_ts_is_snapshot_plus_chain_latency(world):
         r=R, q=Q, latency=lat,
     )
     assert ((chain2["available_ts"] - chain2["snapshot_ts"]) == lat).all()
-    # And the module fixture used the 1s default — same invariant (R3).
+    # And the module fixture used the 1s default — same invariant (R3), with
+    # the SIGN and magnitude pinned (a -latency bug would also be "constant").
     gaps = chain["available_ts"] - chain["snapshot_ts"]
     assert gaps.nunique() == 1
+    assert gaps.iloc[0] == pd.Timedelta(milliseconds=1_000)
 
 
 # --------------------------------------------------------------------------- #
@@ -176,10 +180,13 @@ def test_prev_session_oi_is_strictly_earlier(tmp_path):
         part.mkdir(parents=True)
         _oi_for(value=oi_val).to_parquet(part / "oi.parquet", index=False)
 
-    oi = prev_session_oi(root, "SPY", DAY)
+    oi, src = prev_session_oi(root, "SPY", DAY)
     assert (oi["open_interest"] == 222.0).all()      # latest STRICTLY before D
-    assert prev_session_oi(root, "SPY", date(2026, 6, 4)).empty
-    assert prev_session_oi(root, "QQQ", DAY).empty
+    assert src == date(2026, 6, 5)                   # auditable source session
+    empty, none_src = prev_session_oi(root, "SPY", date(2026, 6, 4))
+    assert empty.empty and none_src is None
+    empty_q, _ = prev_session_oi(root, "QQQ", DAY)
+    assert empty_q.empty
 
 
 def test_no_look_ahead_property():
@@ -212,6 +219,28 @@ def test_stale_quotes_are_not_carried_forward():
     assert stats.snapshots_no_spot > 0
 
 
+def test_oi_join_tolerates_strike_representation_drift():
+    """A one-ULP strike difference between the quote and OI endpoints must not
+    silently zero every gamma weight — keys round to a fixed grid."""
+    spot = _spot_path()[:30]
+    quotes = _quotes_from_world(spot)
+    quotes["strike"] = quotes["strike"] + 1e-7        # representation drift
+    chain, stats = synthesize_chain(
+        quotes, _oi_for(), symbol="SPY", day=DAY, cadence="5m", r=R, q=Q)
+    assert (chain["open_interest"] == 1500.0).all()
+    assert stats.oi_missing_contracts == 0
+
+
+def test_systematic_oi_key_mismatch_refused():
+    """An OI table that matches ZERO contracts is a key-format bug, not missing
+    wings — zeroing all gamma would silently neuter GEX, so it must raise."""
+    spot = _spot_path()[:30]
+    quotes = _quotes_from_world(spot)
+    shifted = _oi_for(strikes=[k + 50.0 for k in STRIKES])   # non-empty, no overlap
+    with pytest.raises(ValueError, match="systematic"):
+        synthesize_chain(quotes, shifted, symbol="SPY", day=DAY, cadence="5m", r=R, q=Q)
+
+
 # --------------------------------------------------------------------------- #
 # Honesty refusals
 # --------------------------------------------------------------------------- #
@@ -230,6 +259,76 @@ def test_junk_quotes_yield_no_iv_rows():
         pd.DataFrame(rows), _oi_for(), symbol="SPY", day=DAY, cadence="5m", r=R, q=Q)
     assert chain.empty                                # no parity pair, no spot, no rows
     assert stats.snapshots_no_spot == stats.snapshots_total
+
+
+def test_junk_deep_wing_inversion_is_dropped():
+    """R6: a deep-OTM mid whose inversion converges to an absurd root (or fails)
+    must be dropped and counted — never emitted with a junk IV."""
+    spot = _spot_path()[:10]
+    quotes = _quotes_from_world(spot)
+    junk = []
+    for ts in spot.index:
+        # A $45 mid on a 100-points-OTM 0DTE call only prices at sigma ~ 7+ —
+        # the solver "converges" to a root past the 500% ceiling.
+        junk.append({
+            "ts": ts, "expiration": DAY, "strike": 700.0, "right": "C",
+            "bid": 44.5, "ask": 45.5, "bid_size": 5, "ask_size": 5, "mid": 45.0,
+        })
+    chain, stats = synthesize_chain(
+        pd.concat([quotes, pd.DataFrame(junk)], ignore_index=True),
+        _oi_for(), symbol="SPY", day=DAY, cadence="5m", r=R, q=Q)
+    assert not (chain["strike"] == 700.0).any()
+    assert stats.rows_dropped_iv > 0
+    assert (chain["implied_vol"] < 5.0).all()
+
+
+def test_below_intrinsic_mid_yields_none_and_is_dropped():
+    """R9: a no-arb-violating mid makes the vendor solver return None — the row
+    must be dropped and counted, never placeholdered."""
+    spot = _spot_path()[:10]
+    quotes = _quotes_from_world(spot)
+    bad = []
+    for ts in spot.index:
+        # Deep ITM call: intrinsic ~ spot - 590 ~ 10; a 5.00 mid violates no-arb.
+        bad.append({
+            "ts": ts, "expiration": DAY, "strike": 590.0, "right": "C",
+            "bid": 4.95, "ask": 5.05, "bid_size": 5, "ask_size": 5, "mid": 5.00,
+        })
+    chain, stats = synthesize_chain(
+        pd.concat([quotes, pd.DataFrame(bad)], ignore_index=True),
+        _oi_for(), symbol="SPY", day=DAY, cadence="5m", r=R, q=Q)
+    assert not (chain["strike"] == 590.0).any()
+    assert stats.rows_dropped_iv > 0
+
+
+def test_wide_legs_refuse_parity_and_drop_snapshots():
+    """R11/R12: when every leg's relative spread exceeds the ceiling there is no
+    usable parity pair — snapshots are dropped whole, never approximated."""
+    spot = _spot_path()[:60]
+    wide = _quotes_from_world(spot, rel_spread=0.60)   # 60% >> 25% ceiling
+    chain, stats = synthesize_chain(
+        wide, _oi_for(), symbol="SPY", day=DAY, cadence="5m", r=R, q=Q)
+    assert chain.empty
+    assert stats.snapshots_no_spot == stats.snapshots_total
+
+
+def test_non_0dte_inversion_uses_consumer_clock_too():
+    """R7 beyond 0DTE: a week-out expiry inverts at consumer_T = 7/365 (constant)
+    while parity's year_fraction decays — recovery must stay exact and flat."""
+    far = DAY + timedelta(days=7)
+    spot = _spot_path()[:120]
+    quotes = _quotes_from_world(spot, expiry=far)      # priced at consumer_T(far, DAY)
+    chain, _ = synthesize_chain(
+        quotes, _oi_for(expiry=far), symbol="SPY", day=DAY, cadence="5m", r=R, q=Q)
+    assert len(chain) > 0
+    err = (chain["implied_vol"] - SIGMA_TRUE).abs()
+    assert float(err.median()) < 0.01
+    snaps = sorted(chain["snapshot_ts"].unique())
+    err_at = {
+        s: float((chain[chain["snapshot_ts"] == s]["implied_vol"] - SIGMA_TRUE).abs().mean())
+        for s in (snaps[1], snaps[-1])
+    }
+    assert err_at[snaps[-1]] <= err_at[snaps[1]] + 0.01
 
 
 def test_spx_synthesis_is_refused():
@@ -397,7 +496,9 @@ def test_main_end_to_end(tmp_path):
     )
     assert sidecar["synthesized"] is True
     assert sidecar["oi_policy"] == "prev_session"
+    assert sidecar["oi_source_date"] == "2026-06-05"  # auditable OI provenance
     assert sidecar["rows_emitted"] > 0
+    assert "365" in sidecar["iv_T"]                   # the R7 clock is recorded
 
 
 def test_main_refuses_non_0dte_chain(tmp_path):
@@ -419,7 +520,43 @@ def test_main_refuses_non_0dte_chain(tmp_path):
         "--symbols", "SPY", "--start", "2026-06-08", "--end", "2026-06-08",
     ])
     assert rc == 1
+    # A refused chain writes NOTHING for the session — no tape without its
+    # chain, so a fused options replay can never crash on a half-ingested day.
     assert not (store_root / "option_chain" / "ticker=SPY" / f"date={DAY}").exists()
+    assert not (store_root / "option_tape" / "ticker=SPY" / f"date={DAY}").exists()
+    assert not (store_root / "option_quotes" / "ticker=SPY" / f"date={DAY}").exists()
+
+
+def test_main_skips_incomplete_raw_partition_and_continues(tmp_path, capsys):
+    """An interrupted pull (no quotes.parquet yet) must be skipped loudly while
+    the rest of the ingest proceeds — one bad partition never aborts the run."""
+    from scripts.ingest_theta_options import main
+
+    raw = tmp_path / "theta"
+    store_root = tmp_path / "store"
+    spot = _spot_path()
+    quotes = _quotes_from_world(spot)
+    trades = pd.DataFrame([{
+        "ts": spot.index[5], "expiration": DAY, "strike": 600.0, "right": "C",
+        "price": 1.15, "size": 5, "nbbo_bid": 1.10, "nbbo_ask": 1.20,
+        "side_inferred": "buy",
+    }])
+    # Good partition on DAY; broken partition (trades only) the day after.
+    _write_raw_partition(raw, "SPY", DAY, quotes=quotes, trades=trades, oi=_oi_for())
+    broken = raw / "ticker=SPY" / "date=2026-06-09"
+    broken.mkdir(parents=True)
+    trades.to_parquet(broken / "trades.parquet", index=False)
+
+    rc = main([
+        "--raw-root", str(raw), "--store-root", str(store_root),
+        "--symbols", "SPY", "--start", "2026-06-08", "--end", "2026-06-09",
+    ])
+    out = capsys.readouterr().out
+    assert rc == 1                                    # the skip is a recorded problem
+    assert "incomplete" in out
+    # The good session was still fully ingested.
+    store = ParquetStore(store_root)
+    assert store.read_chain("SPY", DAY).source is DataSource.THETA_DERIVED
 
 
 def test_synth_stats_shape():

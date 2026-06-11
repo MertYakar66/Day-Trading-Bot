@@ -143,7 +143,8 @@ def test_expiry_raises_when_nothing_on_or_after():
         (1.12, 1.10, 1.20, "sell"),    # interior, below mid
         (1.15, 1.10, 1.20, "sell"),    # exact mid -> documented tie convention
         (1.15, 1.20, 1.10, "mid"),     # crossed quote -> honest unknown
-        (1.15, np.nan, 1.20, "mid"),   # missing leg -> honest unknown
+        (1.15, np.nan, 1.20, "mid"),   # missing bid -> honest unknown
+        (1.15, 1.10, np.nan, "mid"),   # missing ask -> honest unknown
     ],
 )
 def test_classify_side(price, bid, ask, expected):
@@ -210,7 +211,7 @@ def test_pull_session_sends_scoped_params():
         "symbol": "SPY", "expiration": "20260608", "date": "20260608", "strike_range": "10",
     }
     assert by_path["/v3/option/history/quote"]["interval"] == "1m"
-    assert "strike_range" not in by_path["/v3/option/history/open_interest"] or True
+    assert "strike_range" not in by_path["/v3/option/history/open_interest"]
     assert len(res.trades) == 3 and len(res.quotes) == 3 and len(res.oi) == 2
 
 
@@ -330,3 +331,71 @@ def test_main_flag_alone_is_not_enough(tmp_path, capsys, monkeypatch):
 def test_runstats_defaults():
     stats = RunStats()
     assert (stats.planned, stats.pulled, stats.skipped_resume, stats.failed) == (0, 0, 0, [])
+
+
+# --------------------------------------------------------------------------- #
+# Hardening from the adversarial review
+# --------------------------------------------------------------------------- #
+def test_out_root_inside_vendor_is_refused(tmp_path):
+    """G11 is enforced, not assumed: vendor/ trees are read-only."""
+    with pytest.raises(ValueError, match="vendor"):
+        TapeScope(symbols=("SPY",), start=DAY, end=DAY,
+                  out_root=tmp_path / "vendor" / "swe" / "data")
+    # A non-vendor path constructs fine.
+    TapeScope(symbols=("SPY",), start=DAY, end=DAY, out_root=tmp_path / "theta")
+
+
+def test_strike_unit_mismatch_across_endpoints_is_loud():
+    """trades=millis vs quotes=dollars is a genuine units split that must raise,
+    not silently resolve to the non-1.0 vote."""
+    responses = _full_fake().responses
+    dollar_quotes = _raw_quotes()
+    dollar_quotes["strike"] = [600.0, 600.0, 605.0]   # dollars vs trades' millis
+    responses["/v3/option/history/quote"] = dollar_quotes
+    client = FakeThetaClient(responses)
+    scope = TapeScope(symbols=("SPY",), start=DAY, end=DAY)
+    with pytest.raises(PullError, match="strike-unit mismatch"):
+        pull_session(client, "SPY", DAY, scope, expirations=EXPS)
+
+
+def test_empty_endpoint_gets_no_strike_unit_vote(tmp_path):
+    """An EMPTY endpoint's 1.0 divisor is 'no opinion', not a 'dollars' vote —
+    millis trades + empty quotes must not be a mismatch."""
+    responses = _full_fake().responses
+    del responses["/v3/option/history/quote"]          # -> empty frame
+    client = FakeThetaClient(responses)
+    scope = TapeScope(symbols=("SPY",), start=DAY, end=DAY)
+    res = pull_session(client, "SPY", DAY, scope, expirations=EXPS)
+    assert res.strike_divisor == 1000.0
+
+
+def test_expiration_listing_failure_is_journaled_not_fatal(tmp_path):
+    """A failed listing kills only that symbol; the run proceeds and the
+    failure lands in stats + _runs.json (previously: unjournaled abort)."""
+
+    class _ListingFails(FakeThetaClient):
+        def get(self, path, params):
+            if path == "/v3/option/list/expirations" and dict(params)["symbol"] == "QQQ":
+                raise PullError("garbled listing")
+            return super().get(path, params)
+
+    client = _ListingFails(_full_fake().responses)
+    scope = TapeScope(symbols=("SPY", "QQQ"), start=DAY, end=DAY,
+                      out_root=tmp_path / "t")
+    stats = run_pull(scope, client, trading_days_fn=lambda s, e: [DAY], log=lambda m: None)
+    assert stats.pulled == 1                           # SPY proceeded
+    assert ("QQQ", "<expirations>", "garbled listing") in [
+        (s, d, e) for s, d, e in stats.failed
+    ]
+    runs = json.loads((tmp_path / "t" / "_runs.json").read_text())
+    assert any("<expirations>" in str(r["failed"]) for r in runs)
+
+
+def test_dry_run_plan_warns_on_spx(capsys, monkeypatch):
+    monkeypatch.delenv("THETA_OPERATOR_CONFIRM", raising=False)
+    main(["--symbols", "SPX", "SPY", "--start", "2026-06-08", "--end", "2026-06-08"])
+    out = capsys.readouterr().out
+    assert "TAPE-ONLY" in out and "REFUSES" in out
+    capsys.readouterr()
+    main(["--symbols", "SPY", "--start", "2026-06-08", "--end", "2026-06-08"])
+    assert "TAPE-ONLY" not in capsys.readouterr().out

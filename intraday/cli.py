@@ -83,11 +83,34 @@ def _build_provider(args, cfg: EngineConfig, symbols: list[str]):
         options = StoreBackedProvider(
             store, DataSource.THETA, chain_source=DataSource.THETA_DERIVED
         )
-        return FusedDataProvider(underlying, options=options)
+        provider = FusedDataProvider(underlying, options=options)
+        _preflight_fused_chains(provider, store, args, symbols)
+        return provider
     source = _STORE_SOURCES[args.provider]
     return StoreBackedProvider(
         ParquetStore(args.store_root), source, symbols=symbols, interval=args.interval
     )
+
+
+def _preflight_fused_chains(provider, store: ParquetStore, args, symbols: list[str]) -> None:
+    """Loud-before-compute: an options strategy over a fused store must fail UP
+    FRONT when the union calendar contains sessions with no chain partition
+    (the ingest refuses e.g. non-0DTE captures and writes nothing) — otherwise
+    the engine crashes mid-replay on ``read_chain`` after wasted compute."""
+    keys = _dedup_strategies(list(getattr(args, "strategy", []) or []))
+    if not any(STRATEGIES[k].needs_options for k in keys if k in STRATEGIES):
+        return
+    days = provider.trading_days(args.start, args.end)
+    missing = [(s, d) for s in symbols for d in days if not store.has_chain(s, d)]
+    if missing:
+        sample = ", ".join(f"{s} {d}" for s, d in missing[:5])
+        raise SystemExit(
+            f"--provider fused-store: {len(missing)} (symbol, session) pair(s) in "
+            f"the window carry no option_chain partition (e.g. {sample}) but an "
+            "options strategy was requested. Narrow --start/--end, drop the "
+            "options strategy, or re-ingest (a refused chain writes nothing for "
+            "its session)."
+        )
 
 
 def _build_strategies(names: list[str], edge: float, entry_z: float, stop_k: float):

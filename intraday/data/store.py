@@ -64,6 +64,11 @@ class ParquetStore:
         (part / f"bars_{series.interval}_meta.json").write_text(json.dumps(meta))
         return path
 
+    def has_bars(self, symbol: str, day: date, interval: str = "1m") -> bool:
+        """Whether a bars partition exists (any source) — e.g. the parity-ingest
+        no-clobber check, without callers touching the partition layout."""
+        return (self._partition("bars", symbol, day) / f"bars_{interval}.parquet").exists()
+
     def read_bars(self, symbol: str, day: date, interval: str = "1m") -> BarSeries:
         part = self._partition("bars", symbol, day)
         path = part / f"bars_{interval}.parquet"
@@ -104,7 +109,12 @@ class ParquetStore:
         return OptionTape(symbol.upper(), frame, self._read_source(part / "trades_meta.json"))
 
     # -- option chain --------------------------------------------------- #
-    def write_chain(self, chain: OptionChainSeries, day: date) -> Path:
+    def write_chain(
+        self, chain: OptionChainSeries, day: date, *, synthesis: dict | None = None
+    ) -> Path:
+        """Persist a chain partition; ``synthesis`` (for derived/synthesized
+        chains) is stored as a ``chain_synthesis.json`` sidecar beside the
+        provenance sidecar — sidecar writing stays the store's job."""
         part = self._partition("option_chain", chain.symbol, day)
         part.mkdir(parents=True, exist_ok=True)
         path = part / "chain.parquet"
@@ -112,7 +122,14 @@ class ParquetStore:
         (part / "chain_meta.json").write_text(
             json.dumps({"symbol": chain.symbol, "source": chain.source.value})
         )
+        if synthesis is not None:
+            (part / "chain_synthesis.json").write_text(json.dumps(synthesis, indent=1))
         return path
+
+    def has_chain(self, symbol: str, day: date) -> bool:
+        """Whether a chain partition exists — e.g. the fused-store preflight for
+        options strategies, without callers touching the partition layout."""
+        return (self._partition("option_chain", symbol, day) / "chain.parquet").exists()
 
     def read_chain(self, symbol: str, day: date) -> OptionChainSeries:
         part = self._partition("option_chain", symbol, day)

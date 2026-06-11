@@ -102,6 +102,17 @@ headline is unchanged**). Tests 487 → 529 → 544.
     from one provider without relabelling.
   - `docs/OPERATOR_RUNBOOK.md` rewritten around the real, verified commands
     (probe-first discipline; budget from the probe, not the estimate).
+  - **Adversarially reviewed pre-PR** (5-lens panel): the look-ahead lens
+    returned zero findings; every confirmed finding elsewhere was fixed —
+    per-partition ingest resilience (an incomplete raw partition is skipped
+    loudly, never a run-aborting crash), atomic per-session ingest (a refused
+    chain writes nothing), OI join keys rounded (a strike-representation drift
+    can no longer silently zero all gamma — and matching ZERO contracts against
+    a non-empty OI table now raises), strike-unit mismatches across endpoints
+    are loud, expiration-listing failures are journaled per-symbol, the
+    fused-store preflight fails options runs up front on chain-less sessions,
+    and the pure synthesis core moved into `intraday/data/chain_synthesis.py`
+    (the `ibkr.py` layering precedent).
 - Eval honesty disclosures: an i.i.d. serial-dependence caveat (the stationary
   bootstrap CI is named as the short-range-robust counterweight) and a small-`n_trials`
   caveat on a green EDGE verdict.

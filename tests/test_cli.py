@@ -309,3 +309,19 @@ def test_fused_store_backtest_spans_mixed_bar_sources(tmp_path, capsys, make_ibk
               "--store-root", str(tmp_path / "store"),
               "--symbols", "SPY", "--interval", "5m", "--strategy", "s3",
               "--start", "2026-06-02", "--end", "2026-06-02", "--no-eval"])
+
+
+def test_fused_preflight_refuses_options_run_with_missing_chains(tmp_path, make_ibkr_payload):
+    """Loud-before-compute: an s1 (options) run over a fused store whose sessions
+    carry no chain partition must fail UP FRONT with guidance — not crash on
+    read_chain mid-replay after wasted compute. Underlying-only runs pass."""
+    from intraday.data.ibkr import ingest_payload
+
+    store = ParquetStore(tmp_path / "store")
+    ingest_payload(store, "SPY", "5m", make_ibkr_payload(date(2026, 6, 1), "5m"))
+
+    with pytest.raises(SystemExit, match="no option_chain partition"):
+        main(["backtest", "--provider", "fused-store",
+              "--store-root", str(tmp_path / "store"),
+              "--symbols", "SPY", "--interval", "5m", "--strategy", "s1",
+              "--start", "2026-06-01", "--end", "2026-06-01", "--no-eval"])

@@ -142,6 +142,14 @@ class TapeScope:
     trades_endpoint: str = "trade_quote"      # "trade_quote" | "trade"
     out_root: Path = Path("data_raw/theta")   # G11: never inside vendor/
 
+    def __post_init__(self) -> None:
+        # G11 is enforced, not assumed: vendor/ is a read-only dependency tree.
+        if "vendor" in Path(self.out_root).resolve().parts:
+            raise ValueError(
+                f"out_root must never sit inside a vendor/ tree (read-only): "
+                f"{self.out_root}"
+            )
+
 
 @dataclass
 class SessionResult:
@@ -446,10 +454,22 @@ def pull_session(
     endpoints["oi"] = "/v3/option/history/open_interest"
     warnings.extend(w)
 
-    divisors = {d for d in (div_t, div_q, div_o) if d != 1.0}
-    divisor = divisors.pop() if len(divisors) == 1 else (1.0 if not divisors else -1.0)
-    if divisor == -1.0:
-        raise PullError(f"inconsistent strike divisors across endpoints for {symbol} {day}")
+    # Strike-unit cross-check: only endpoints that returned DATA get a vote
+    # (an empty frame's 1.0 is "no opinion", not "dollars"), and any genuine
+    # disagreement — including millis-vs-dollars — is a loud per-session error.
+    votes = {
+        name: d
+        for name, d, frame in (
+            ("trades", div_t, trades), ("quotes", div_q, quotes), ("oi", div_o, oi)
+        )
+        if len(frame)
+    }
+    distinct = set(votes.values())
+    if len(distinct) > 1:
+        raise PullError(
+            f"strike-unit mismatch across endpoints for {symbol} {day}: {votes}"
+        )
+    divisor = distinct.pop() if distinct else 1.0
     if symbol in _THETA_QUERY_ROOTS:
         warnings.append(
             f"queried root {root} for {symbol}; prior {root} captures had junk OI - "
@@ -511,26 +531,36 @@ def run_pull(
     """Execute the scoped pull. Failures are loud, per-partition, and recorded;
     the run continues so one bad session never aborts a billed backfill."""
     stats = RunStats()
+    lock = threading.Lock()
     days = trading_days_fn(scope.start, scope.end)
-    expirations: dict[str, pd.DatetimeIndex] = {
-        sym: fetch_expirations(client, sym) for sym in scope.symbols
-    }
-    work = [(sym, d) for sym in scope.symbols for d in days]
+    # A failed expiration listing kills only THAT symbol, is journaled like any
+    # other failure, and the rest of the (billed) run proceeds.
+    expirations: dict[str, pd.DatetimeIndex] = {}
+    for sym in scope.symbols:
+        try:
+            expirations[sym] = fetch_expirations(client, sym)
+        except PullError as e:
+            stats.failed.append((sym, "<expirations>", str(e)))
+            log(f"  {sym}: expiration listing FAILED - {e}")
+    work = [(sym, d) for sym in scope.symbols if sym in expirations for d in days]
     stats.planned = len(work)
 
     def one(item: tuple[str, date]) -> None:
         sym, d = item
         if resume and _is_complete(scope.out_root, sym, d):
-            stats.skipped_resume += 1
+            with lock:
+                stats.skipped_resume += 1
             return
         try:
             res = pull_session(client, sym, d, scope, expirations=expirations[sym])
             write_session(scope.out_root, sym, d, res)
-            stats.pulled += 1
+            with lock:
+                stats.pulled += 1
             log(f"  {sym} {d}: exp={res.expiration} trades={len(res.trades)} "
                 f"quotes={len(res.quotes)} oi={len(res.oi)}")
         except PullError as e:
-            stats.failed.append((sym, d.isoformat(), str(e)))
+            with lock:
+                stats.failed.append((sym, d.isoformat(), str(e)))
             log(f"  {sym} {d}: FAILED - {e}")
 
     with ThreadPoolExecutor(max_workers=max(workers, 1)) as pool:
@@ -555,10 +585,21 @@ def run_pull(
 # --------------------------------------------------------------------------- #
 def _render_plan(scope: TapeScope, n_days: int) -> str:
     n = n_days * len(scope.symbols)
+    spx_warning = (
+        [
+            "",
+            "  WARNING: SPX/SPXW is TAPE-ONLY context. The ingest REFUSES to",
+            "  synthesize SPX(W) chains (AM/PM settlement ambiguity + junk OI on",
+            "  prior captures) - SPX tape can never feed GEX. Spend accordingly.",
+        ]
+        if any(s in ("SPX", "SPXW") for s in scope.symbols)
+        else []
+    )
     return "\n".join([
         "Scoped Theta TAPE backfill - DRY RUN (no socket opened).",
         f"  symbols={list(scope.symbols)} window={scope.start}..{scope.end} "
         f"({n_days} sessions, {n} session-pulls)",
+        *spx_warning,
         f"  strikes=ATM+/-{scope.strikes_each_side} (server-side strike_range) "
         f"quote-cadence={scope.cadence} trades-endpoint={scope.trades_endpoint}",
         f"  out={scope.out_root} (manifest per partition; --resume skips complete ones)",
