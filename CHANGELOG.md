@@ -7,7 +7,39 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Post-0.1.0 hardening from a second audit pass (no version bump yet; the **NO-EDGE
-headline is unchanged**). Tests 487 → 529.
+headline is unchanged**). Tests 487 → 529 → 540.
+
+### Fixed (2026-06-10 adversarially-verified audit, PR fix/audit-backlog)
+- **Risk metrics dropped the inception point**: the equity curve handed to SWE's
+  performance report started at day 1's CLOSE, so the first day's return was
+  silently excluded from Sharpe/Sortino/volatility and max drawdown was censored
+  against a day-1 peak (a 10% day-1 loss reported `max_drawdown == 0.0`).
+  `build_report` now prepends the initial-capital row, re-annualizes over the true
+  session count, and keeps Calmar consistent; the dashboard's underwater curve
+  seeds its peak at inception capital. (The DSR-based EDGE/NO-EDGE verdict path
+  was always constructed correctly and is unchanged.)
+- **Fills-ledger cost double-count**: CLOSE fill records carried the full
+  round-trip cost while the OPEN fill already carried the entry leg, so the
+  persisted ledger (the designated live-vs-backtest reconciliation record)
+  overstated costs ~150%. `Fill.cost` is now strictly per-leg (structured settles
+  book 0 on the close leg), and the EOD safety-flatten path now appends its CLOSE
+  fill. Trade/equity accounting was never affected. New invariant test:
+  `sum(fill.cost) == sum(trade.costs)` and every OPEN has a CLOSE.
+- **Expiry discipline in the options features**: `gamma_structure_at` and
+  `atm_iv_at` read the whole PIT snapshot, so a real multi-expiry capture would
+  blend expiries (measured on real SPX+SPXW chains at ~3,000x GEX distortion).
+  Both now restrict to the requested expiry and return `None` when the snapshot
+  does not carry it — an absent tenor is unknowable, not approximated.
+- **Verdict floor is a validity floor, not a degeneracy guard**:
+  `INSUFFICIENT_DATA_MIN_DAYS` raised 2 → 20. Below ~a month of sessions the
+  clustered-t / bootstrap / DSR machinery has too few daily observations to mean
+  much, so every surface now abstains (INSUFFICIENT_DATA) instead of printing a
+  definitive verdict on, e.g., a 5-day run. Documented explicitly as not a power
+  guarantee: NO_EDGE always means "no evidence at this sample size".
+- **Comparison rows now use the three-state verdict**: per-row badges route
+  through `eval.edge_verdict` (new neutral `badge--nodata` style), so a too-short
+  run reads "insufficient data" in the table exactly as the page band does,
+  instead of a definitive binary "no edge".
 
 ### Fixed
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules

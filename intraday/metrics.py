@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import pandas as pd
+
 from .backtest.engine import BacktestResult
 
 
@@ -99,12 +101,31 @@ def build_report(result: BacktestResult) -> MetricsReport:
     from engine.performance_metrics import calculate_performance_report  # lazy
 
     rows = result.closed_trade_rows()
+    # SWE's calculate_returns ignores its initial_capital argument (returns are
+    # np.diff over the curve values) and calculate_max_drawdown anchors its running
+    # peak at the first row, so a curve that starts at day 1's CLOSE silently drops
+    # the first day's return from Sharpe/Sortino/volatility and censors any
+    # drawdown from inception. Prepend the inception point so day 1 is a real
+    # return and the peak starts at initial capital.
+    curve = result.equity_curve
+    if curve:
+        inception_ts = (pd.Timestamp(curve[0]["date"]) - pd.Timedelta(days=1)).isoformat()
+        curve = [
+            {"date": inception_ts, "portfolio_value": result.initial_capital},
+            *curve,
+        ]
     swe = calculate_performance_report(
         closed_trades=rows,
-        equity_curve=result.equity_curve,
+        equity_curve=curve,
         initial_capital=result.initial_capital,
         risk_free_rate=result.config.gate.risk_free_rate,
     )
+    # SWE annualizes with num_days = len(equity_curve); the prepended inception row
+    # is day 0, not a session, so re-annualize total return over the true session
+    # count (and keep Calmar consistent with it).
+    n_sessions = max(result.n_days, 1)
+    annualized_return = ((1.0 + swe.total_return) ** (252.0 / n_sessions)) - 1.0
+    calmar_ratio = annualized_return / swe.max_drawdown if swe.max_drawdown > 0 else 0.0
 
     gross = sum(t.gross_pnl for t in result.trades)
     costs = sum(t.costs for t in result.trades)
@@ -143,12 +164,12 @@ def build_report(result: BacktestResult) -> MetricsReport:
         cost_per_trade=cost_per_trade,
         cost_bps_of_notional=cost_bps_of_notional,
         total_return=swe.total_return,
-        annualized_return=swe.annualized_return,
+        annualized_return=annualized_return,
         volatility=swe.volatility,
         sharpe_ratio=swe.sharpe_ratio,
         sortino_ratio=swe.sortino_ratio,
         max_drawdown=swe.max_drawdown,
-        calmar_ratio=swe.calmar_ratio,
+        calmar_ratio=calmar_ratio,
         total_trades=n,
         win_rate=swe.win_rate,
         profit_factor=swe.profit_factor,

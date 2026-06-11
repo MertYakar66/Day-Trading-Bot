@@ -16,7 +16,7 @@ from collections.abc import Mapping, Sequence
 
 from ..backtest.engine import BacktestResult
 from ..eval import evaluate_result
-from ..eval.stats import INSUFFICIENT_DATA_MIN_DAYS
+from ..eval.stats import INSUFFICIENT_DATA_MIN_DAYS, edge_verdict
 from ..metrics import build_report
 from . import svg
 from .dashboard import _banner, _cls, _esc, _fnum, _signed_money
@@ -40,9 +40,15 @@ def _legend(names: Sequence[str]) -> str:
     return '<div class="legend">' + "".join(items) + "</div>"
 
 
-def _verdict_badge(significant: bool) -> str:
-    if significant:
+def _verdict_badge(ev) -> str:
+    # Route each row through the centralized three-state verdict so a too-short
+    # run reads "insufficient data" here exactly as it does on every other surface
+    # (a binary badge would print a definitive "no edge" the page itself disclaims).
+    verdict = edge_verdict(ev)
+    if verdict == "EDGE":
         return '<span class="badge badge--edge">EDGE</span>'
+    if verdict == "INSUFFICIENT_DATA":
+        return '<span class="badge badge--nodata">insufficient data</span>'
     return '<span class="badge badge--noedge">no edge</span>'
 
 
@@ -70,7 +76,7 @@ def _comparison_table(entries: Sequence[Mapping], best_idx: int) -> str:
             f'<td class="neg">{m.max_drawdown:.2%}</td>'
             f"<td>{m.win_rate:.1%}</td>"
             f"<td>{m.total_trades}</td>"
-            f"<td>{_verdict_badge(ev.significant)}</td>"
+            f"<td>{_verdict_badge(ev)}</td>"
             "</tr>"
         )
     return (

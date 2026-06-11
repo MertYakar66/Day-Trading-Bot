@@ -141,7 +141,8 @@ def test_summary_json_is_deterministic_and_roundtrips():
     b = json.dumps(s2, sort_keys=True)
     assert a == b                          # deterministic
     assert json.loads(a) == s1             # round-trips
-    assert s1["verdict"] in ("EDGE", "NO_EDGE")
+    # A 5-session run sits under the INSUFFICIENT_DATA_MIN_DAYS verdict floor.
+    assert s1["verdict"] == "INSUFFICIENT_DATA"
 
 
 # --------------------------------------------------------------------------- #

@@ -98,10 +98,14 @@ def _esc(s) -> str:
 # --------------------------------------------------------------------------- #
 # Section builders
 # --------------------------------------------------------------------------- #
-def _drawdown_curve(equity: Sequence[float]) -> list[float]:
-    """Underwater curve: fractional drawdown from the running peak (<= 0)."""
+def _drawdown_curve(equity: Sequence[float], *, initial: float | None = None) -> list[float]:
+    """Underwater curve: fractional drawdown from the running peak (<= 0).
+
+    ``initial`` seeds the running peak at inception capital so a loss on day 1
+    is not censored (the curve's first point is day 1's CLOSE, not day 0).
+    """
     out: list[float] = []
-    peak = float("-inf")
+    peak = float(initial) if initial is not None else float("-inf")
     for v in equity:
         peak = max(peak, v)
         out.append((v / peak - 1.0) if peak > 0 else 0.0)
@@ -527,7 +531,7 @@ def render_dashboard(
     daily = daily_pnl_from_result(result)
     daily_vals = [float(v) for v in daily.to_numpy()] if len(daily) else []
     daily_dates = [str(d)[:10] for d in daily.index] if len(daily) else []
-    dd = _drawdown_curve(equity)
+    dd = _drawdown_curve(equity, initial=result.initial_capital)
 
     rm = run_meta or {}
     meta_bits = [

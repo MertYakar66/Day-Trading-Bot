@@ -48,6 +48,13 @@ def gamma_structure_at(
     snap = chain.latest_available(as_of)
     if snap.empty:
         return None
+    # A real capture can hold several expiries in one snapshot. Blending them
+    # would price far-dated OI at this expiry's T (measured on real SPX+SPXW
+    # chains: gex_total moved ~3,000x), so keep only the rows of the expiry this
+    # structure is for; if the snapshot has none, there is no structure to read.
+    snap = snap.loc[pd.to_datetime(snap["expiration"]).dt.date == expiry]
+    if snap.empty:
+        return None
 
     from engine.dealer_positioning import (  # lazy
         DealerPositioningAnalyzer,
