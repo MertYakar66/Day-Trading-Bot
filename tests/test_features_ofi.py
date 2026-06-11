@@ -1,7 +1,10 @@
-"""Tests for intraday.features.ofi (order-flow imbalance from the option tape).
+"""Tests for intraday.features.ofi (direction-signed order-flow imbalance).
 
-OFI = (buy_vol - sell_vol) / (buy_vol + sell_vol) over PIT-filtered prints.
-Pure functions + the SyntheticDataProvider tape; no network, deterministic.
+Each print is signed by what the customer initiation means for the UNDERLYING:
+buy-call / sell-put = bullish (+), sell-call / buy-put = bearish (−), "mid"
+excluded. OFI = (bull_vol - bear_vol) / (bull_vol + bear_vol) over PIT-filtered
+prints. Pure functions + the SyntheticDataProvider tape; no network,
+deterministic.
 """
 
 from __future__ import annotations
@@ -13,56 +16,74 @@ from intraday.features.ofi import ofi_at, ofi_from_prints
 from intraday.timeutils import session_bounds_utc
 
 
-def _prints(rows: list[tuple[str, float]]) -> pd.DataFrame:
-    """Build a minimal prints frame with the columns ofi_from_prints reads."""
+def _prints(rows: list[tuple[str, str, float]]) -> pd.DataFrame:
+    """Build a minimal prints frame: (side_inferred, right, size)."""
     return pd.DataFrame(
         {
             "side_inferred": [r[0] for r in rows],
-            "size": [r[1] for r in rows],
+            "right": [r[1] for r in rows],
+            "size": [r[2] for r in rows],
         }
     )
 
 
 # --------------------------------------------------------------------------- #
-# ofi_from_prints — pure-function edge cases
+# ofi_from_prints — direction signing (the audit-confirmed G9 fix)
 # --------------------------------------------------------------------------- #
 
 
-def test_all_buys_is_plus_one():
-    df = _prints([("buy", 3.0), ("buy", 7.0), ("buy", 1.0)])
+def test_buying_calls_is_bullish():
+    df = _prints([("buy", "C", 3.0), ("buy", "C", 7.0)])
     assert ofi_from_prints(df) == pytest.approx(1.0)
 
 
-def test_all_sells_is_minus_one():
-    df = _prints([("sell", 5.0), ("sell", 2.0)])
+def test_buying_puts_is_bearish_not_buying_pressure():
+    """THE defect this fix exists for: heavy put BUYING is bearish, but the old
+    sign-blind OFI counted it as +1 'buying pressure'."""
+    df = _prints([("buy", "P", 5.0), ("buy", "P", 2.0)])
     assert ofi_from_prints(df) == pytest.approx(-1.0)
 
 
-def test_mixed_is_strictly_between():
-    # buy_vol=10, sell_vol=30 -> (10-30)/40 = -0.5
-    df = _prints([("buy", 10.0), ("sell", 30.0)])
-    val = ofi_from_prints(df)
-    assert -1.0 < val < 1.0
-    assert val == pytest.approx(-0.5)
+def test_selling_puts_is_bullish():
+    df = _prints([("sell", "P", 4.0)])
+    assert ofi_from_prints(df) == pytest.approx(1.0)
+
+
+def test_selling_calls_is_bearish():
+    df = _prints([("sell", "C", 4.0)])
+    assert ofi_from_prints(df) == pytest.approx(-1.0)
+
+
+def test_call_buying_offsets_put_buying():
+    # buy 10 calls (bull) vs buy 30 puts (bear) -> (10-30)/40 = -0.5.
+    # The old definition read this as +1.0 (all customer "buys").
+    df = _prints([("buy", "C", 10.0), ("buy", "P", 30.0)])
+    assert ofi_from_prints(df) == pytest.approx(-0.5)
 
 
 def test_mixed_size_weighted_not_count_weighted():
-    # Three buys of size 1 (vol 3) vs one sell of size 9 (vol 9).
-    # Count-weighted would be positive; size-weighted is (3-9)/12 = -0.5.
-    df = _prints([("buy", 1.0), ("buy", 1.0), ("buy", 1.0), ("sell", 9.0)])
+    # Three bullish prints of size 1 vs one bearish of size 9 -> (3-9)/12 = -0.5.
+    df = _prints([("buy", "C", 1.0), ("buy", "C", 1.0), ("sell", "P", 1.0),
+                  ("sell", "C", 9.0)])
     assert ofi_from_prints(df) == pytest.approx((3.0 - 9.0) / 12.0)
 
 
-def test_balanced_buys_and_sells_is_zero():
-    df = _prints([("buy", 4.0), ("sell", 4.0)])
+def test_balanced_flow_is_zero():
+    df = _prints([("buy", "C", 4.0), ("buy", "P", 4.0)])
     assert ofi_from_prints(df) == pytest.approx(0.0)
 
 
 def test_mid_prints_are_excluded_from_classification():
-    # 'mid' is ambiguous and must not enter buy/sell volume.
-    df = _prints([("buy", 6.0), ("mid", 100.0), ("sell", 2.0)])
-    # denom excludes the mid size -> (6-2)/(6+2) = 0.5
-    assert ofi_from_prints(df) == pytest.approx(0.5)
+    # 'mid' is ambiguous and must not enter either side, whatever its right.
+    df = _prints([("buy", "C", 6.0), ("mid", "C", 100.0), ("mid", "P", 50.0),
+                  ("sell", "C", 2.0)])
+    assert ofi_from_prints(df) == pytest.approx((6.0 - 2.0) / 8.0)
+
+
+def test_right_is_normalized():
+    # 'call'/'put' spellings and stray whitespace must classify like 'C'/'P'.
+    df = _prints([("buy", "call", 5.0), ("buy", " put ", 5.0)])
+    assert ofi_from_prints(df) == pytest.approx(0.0)
 
 
 def test_empty_frame_returns_none():
@@ -74,19 +95,19 @@ def test_none_input_returns_none():
 
 
 def test_all_mid_returns_none():
-    # denom (buy_vol + sell_vol) == 0 -> None, not a divide-by-zero / NaN.
-    df = _prints([("mid", 5.0), ("mid", 11.0)])
+    # denom == 0 -> None, not a divide-by-zero / NaN.
+    df = _prints([("mid", "C", 5.0), ("mid", "P", 11.0)])
     assert ofi_from_prints(df) is None
 
 
 def test_zero_size_prints_yield_none():
-    # Non-empty but all volume is zero -> denom 0 -> None.
-    df = _prints([("buy", 0.0), ("sell", 0.0)])
+    df = _prints([("buy", "C", 0.0), ("sell", "C", 0.0)])
     assert ofi_from_prints(df) is None
 
 
 def test_output_bounded_in_unit_interval():
-    df = _prints([("buy", 1.0), ("buy", 2.0), ("sell", 8.0), ("sell", 3.0)])
+    df = _prints([("buy", "C", 1.0), ("sell", "P", 2.0), ("sell", "C", 8.0),
+                  ("buy", "P", 3.0)])
     val = ofi_from_prints(df)
     assert -1.0 <= val <= 1.0
 
