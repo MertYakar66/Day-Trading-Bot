@@ -5,12 +5,13 @@ from SWE's ``data.feature_store``, which partitions by ``ticker=`` only and pull
 in a heavy ``data/__init__`` — see ``docs/SWE_API_REFERENCE.md`` and PROGRESS.md
 for the rationale). Layout::
 
-    <root>/bars/        ticker=<SYM>/date=<D>/bars_<interval>.parquet
-    <root>/option_tape/ ticker=<SYM>/date=<D>/trades.parquet
-    <root>/option_chain/ticker=<SYM>/date=<D>/chain.parquet
-    <root>/features/    ticker=<SYM>/date=<D>/<group>.parquet
-    <root>/signals/     date=<D>/signals.parquet
-    <root>/paper_ledger/date=<D>/fills.parquet
+    <root>/bars/         ticker=<SYM>/date=<D>/bars_<interval>.parquet
+    <root>/option_tape/  ticker=<SYM>/date=<D>/trades.parquet
+    <root>/option_chain/ ticker=<SYM>/date=<D>/chain.parquet
+    <root>/option_quotes/ticker=<SYM>/date=<D>/quotes_<interval>.parquet
+    <root>/features/     ticker=<SYM>/date=<D>/<group>.parquet
+    <root>/signals/      date=<D>/signals.parquet
+    <root>/paper_ledger/ date=<D>/fills.parquet
 
 PIT discipline: bar frames are indexed by close ``ts``; tape/chain/feature frames
 carry an ``available_ts`` column. The store persists frames losslessly (tz-aware
@@ -120,6 +121,36 @@ class ParquetStore:
             raise FileNotFoundError(f"no chain at {path}")
         frame = pd.read_parquet(path, engine="pyarrow")
         return OptionChainSeries(symbol.upper(), frame, self._read_source(part / "chain_meta.json"))
+
+    # -- option quotes (ingest/reconstruction intermediate, not an engine input) #
+    def write_option_quotes(
+        self, symbol: str, day: date, frame: pd.DataFrame,
+        *, source: DataSource, interval: str = "1m",
+    ) -> Path:
+        """Persist per-contract quote bars (bid/ask/mid at ``interval`` cadence).
+
+        Quotes are the raw material for chain synthesis and parity spot — they are
+        not consumed by the engine directly, so there is no PIT container class;
+        provenance still round-trips through a sidecar like every other slot.
+        """
+        part = self._partition("option_quotes", symbol, day)
+        part.mkdir(parents=True, exist_ok=True)
+        path = part / f"quotes_{interval}.parquet"
+        frame.to_parquet(path, engine="pyarrow", index=False)
+        (part / f"quotes_{interval}_meta.json").write_text(
+            json.dumps({"symbol": symbol.upper(), "source": source.value, "interval": interval})
+        )
+        return path
+
+    def read_option_quotes(
+        self, symbol: str, day: date, interval: str = "1m"
+    ) -> tuple[pd.DataFrame, DataSource]:
+        part = self._partition("option_quotes", symbol, day)
+        path = part / f"quotes_{interval}.parquet"
+        if not path.exists():
+            raise FileNotFoundError(f"no option quotes at {path}")
+        frame = pd.read_parquet(path, engine="pyarrow")
+        return frame, self._read_source(part / f"quotes_{interval}_meta.json")
 
     @staticmethod
     def _read_source(meta_path: Path) -> DataSource:

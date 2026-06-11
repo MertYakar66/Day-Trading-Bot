@@ -114,3 +114,53 @@ def test_option_chain_tape_roundtrip_with_provenance(tmp_path):
         ibkr.get_option_chain("SPX", D1)
     with pytest.raises(DataUnavailable):
         ibkr.get_option_tape("SPX", D1)
+
+
+# --------------------------------------------------------------------------- #
+# Option quotes slot (ingest/reconstruction intermediate)
+# --------------------------------------------------------------------------- #
+def _quotes(day: date) -> pd.DataFrame:
+    ts = pd.Timestamp(f"{day}T15:00:00Z")
+    return pd.DataFrame(
+        [{
+            "ts": ts, "expiration": day, "strike": 600.0, "right": "C",
+            "bid": 1.10, "ask": 1.20, "bid_size": 10, "ask_size": 12, "mid": 1.15,
+        }]
+    )
+
+
+def test_option_quotes_roundtrip_with_provenance(tmp_path):
+    store = ParquetStore(tmp_path / "store")
+    store.write_option_quotes("SPY", D1, _quotes(D1), source=DataSource.THETA, interval="1m")
+
+    frame, source = store.read_option_quotes("SPY", D1, interval="1m")
+    assert source is DataSource.THETA
+    assert len(frame) == 1
+    assert frame.loc[0, "mid"] == pytest.approx(1.15)
+    # Interval is part of the partition key, like bars.
+    with pytest.raises(FileNotFoundError):
+        store.read_option_quotes("SPY", D1, interval="5m")
+
+
+def test_option_quotes_missing_partition_raises(tmp_path):
+    store = ParquetStore(tmp_path / "store")
+    with pytest.raises(FileNotFoundError):
+        store.read_option_quotes("SPY", D1)
+
+
+def test_option_quotes_missing_sidecar_refused(tmp_path):
+    store = ParquetStore(tmp_path / "store")
+    path = store.write_option_quotes("SPY", D1, _quotes(D1), source=DataSource.THETA)
+    (path.parent / "quotes_1m_meta.json").unlink()
+    with pytest.raises(FileNotFoundError, match="provenance sidecar"):
+        store.read_option_quotes("SPY", D1)
+
+
+def test_theta_derived_source_semantics():
+    """Synthesized chains are real (every input is real) but not Theta-native;
+    the marker must never be confused with SYNTHETIC and must round-trip."""
+    src = DataSource.THETA_DERIVED
+    assert src.is_real
+    assert not src.is_synthetic
+    assert DataSource(src.value) is src
+    assert src is not DataSource.THETA
