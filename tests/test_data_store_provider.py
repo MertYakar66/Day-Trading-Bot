@@ -156,6 +156,35 @@ def test_option_quotes_missing_sidecar_refused(tmp_path):
         store.read_option_quotes("SPY", D1)
 
 
+def test_chain_source_override_serves_mixed_options_provenance(tmp_path):
+    """A capture store legitimately holds raw THETA tape next to THETA_DERIVED
+    synthesized chains; one provider must serve both — each checked against its
+    own declared provenance, never relabelled."""
+    store = ParquetStore(tmp_path / "store")
+    derived = OptionChainSeries("SPX", _chain(D1).frame, DataSource.THETA_DERIVED)
+    store.write_chain(derived, D1)
+    store.write_tape(_tape(D1), D1)  # raw THETA
+
+    prov = StoreBackedProvider(
+        store, DataSource.THETA, symbols=["SPX"], interval="5m",
+        chain_source=DataSource.THETA_DERIVED,
+    )
+    assert prov.get_option_chain("SPX", D1).source is DataSource.THETA_DERIVED
+    assert prov.get_option_tape("SPX", D1).source is DataSource.THETA
+
+    # Without the override the derived chain is refused (no silent relabel)...
+    plain = StoreBackedProvider(store, DataSource.THETA, symbols=["SPX"], interval="5m")
+    with pytest.raises(DataUnavailable, match="provenance mismatch"):
+        plain.get_option_chain("SPX", D1)
+    # ...and the override never relaxes the tape check.
+    swapped = StoreBackedProvider(
+        store, DataSource.THETA_DERIVED, symbols=["SPX"], interval="5m",
+        chain_source=DataSource.THETA_DERIVED,
+    )
+    with pytest.raises(DataUnavailable, match="provenance mismatch"):
+        swapped.get_option_tape("SPX", D1)
+
+
 def test_theta_derived_source_semantics():
     """Synthesized chains are real (every input is real) but not Theta-native;
     the marker must never be confused with SYNTHETIC and must round-trip."""

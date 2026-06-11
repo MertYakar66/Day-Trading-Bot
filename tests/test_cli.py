@@ -232,3 +232,80 @@ def test_doctor_checks_scientific_stack(tmp_path, capsys):
     assert "numpy importable" in out
     assert "pandas importable" in out
     assert "scipy importable" in out
+
+
+# --------------------------------------------------------------------------- #
+# fused-store provider (G5: replay mixed-provenance capture stores)
+# --------------------------------------------------------------------------- #
+def test_fused_store_is_a_provider_choice():
+    ns = build_parser().parse_args(
+        ["backtest", "--provider", "fused-store", "--start", "2026-06-01",
+         "--end", "2026-06-02"]
+    )
+    assert ns.provider == "fused-store"
+
+
+def test_fused_store_missing_root_exits_with_guidance(tmp_path):
+    with pytest.raises(SystemExit, match="store root not found"):
+        main(["backtest", "--provider", "fused-store",
+              "--store-root", str(tmp_path / "nope"),
+              "--start", "2026-06-01", "--end", "2026-06-02"])
+
+
+def test_build_provider_fused_composition(tmp_path):
+    from intraday.cli import _build_provider
+    from intraday.contracts import DataSource
+    from intraday.data.fused import FusedDataProvider
+
+    (tmp_path / "store").mkdir()
+    ns = build_parser().parse_args(
+        ["backtest", "--provider", "fused-store", "--store-root", str(tmp_path / "store"),
+         "--symbols", "SPY", "--interval", "5m",
+         "--start", "2026-06-01", "--end", "2026-06-02"]
+    )
+    prov = _build_provider(ns, EngineConfig.default(), ["SPY"])
+    assert isinstance(prov, FusedDataProvider)
+    assert [u.source for u in prov.underlying] == [
+        DataSource.IBKR, DataSource.PARITY, DataSource.YAHOO,
+    ]
+    assert prov.options is not None
+    assert prov.options.source is DataSource.THETA
+    assert prov.options.chain_source is DataSource.THETA_DERIVED
+
+
+@pytest.mark.swe
+def test_fused_store_backtest_spans_mixed_bar_sources(tmp_path, capsys, make_ibkr_payload):
+    """End-to-end: one IBKR session + one PARITY session in the same store run as
+    TWO trading days under --provider fused-store (the single-source theta-store
+    provider refuses exactly this store shape)."""
+    import dataclasses
+
+    from intraday.contracts import DataSource
+    from intraday.data.ibkr import ingest_payload
+
+    store = ParquetStore(tmp_path / "store")
+    ingest_payload(store, "SPY", "5m", make_ibkr_payload(date(2026, 6, 1), "5m"))
+    # Day 2 ingested the same way (correct 06-02 timestamps), then re-written
+    # with PARITY provenance — the shape a parity-reconstructed session has.
+    ingest_payload(store, "SPY", "5m", make_ibkr_payload(date(2026, 6, 2), "5m"))
+    day2 = store.read_bars("SPY", date(2026, 6, 2), "5m")
+    store.write_bars(dataclasses.replace(day2, source=DataSource.PARITY), date(2026, 6, 2))
+
+    rc = main(["backtest", "--provider", "fused-store",
+               "--store-root", str(tmp_path / "store"),
+               "--symbols", "SPY", "--interval", "5m", "--strategy", "s3",
+               "--start", "2026-06-01", "--end", "2026-06-02", "--no-eval"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "trading days       : 2" in out
+    assert "[REAL DATA: fused]" in out
+
+    # The single-source provider refuses this exact store shape: PARITY bars
+    # under a declared-IBKR provider must never be served (no relabeling).
+    from intraday.data.provider import DataUnavailable
+
+    with pytest.raises(DataUnavailable, match="provenance mismatch"):
+        main(["backtest", "--provider", "ibkr-store",
+              "--store-root", str(tmp_path / "store"),
+              "--symbols", "SPY", "--interval", "5m", "--strategy", "s3",
+              "--start", "2026-06-02", "--end", "2026-06-02", "--no-eval"])

@@ -42,17 +42,48 @@ _STORE_SOURCES: dict[str, DataSource] = {
     "theta-store": DataSource.THETA,
 }
 
+# Underlying fallback order for --provider fused-store: IBKR (freshest, most
+# trusted) -> parity (deep history) -> yahoo (free context). Fixed by design.
+_FUSED_UNDERLYING_ORDER: tuple[DataSource, ...] = (
+    DataSource.IBKR, DataSource.PARITY, DataSource.YAHOO,
+)
+
 
 def _build_provider(args, cfg: EngineConfig, symbols: list[str]):
     """Construct the data provider for the run.
 
     ``synthetic`` (default) is the deterministic fixture; ``ibkr-store`` /
     ``theta-store`` replay REAL data previously ingested into the parquet store
-    (network-free, reproducible). Real-data runs require the data to be ingested
-    first — see docs/REAL_DATA.md / docs/OPERATOR_RUNBOOK.md.
+    (network-free, reproducible). ``fused-store`` composes underlying bars
+    (IBKR → parity → yahoo fallback) with Theta options from ONE store — the
+    replay mode for real options runs (a single-source provider would refuse the
+    mixed bar/options provenance such a store legitimately carries). Real-data
+    runs require the data to be ingested first — see docs/REAL_DATA.md /
+    docs/OPERATOR_RUNBOOK.md.
     """
     if args.provider == "synthetic":
         return SyntheticDataProvider(cfg.data, cfg.session)
+    if args.provider == "fused-store":
+        from .data.fused import FusedDataProvider
+        from .data.provider import DataProvider
+
+        root = Path(args.store_root)
+        if not root.is_dir():
+            raise SystemExit(
+                f"--provider fused-store: store root not found: {root} "
+                "(ingest first - docs/REAL_DATA.md)"
+            )
+        store = ParquetStore(root)
+        underlying: list[DataProvider] = [
+            StoreBackedProvider(store, src, symbols=symbols, interval=args.interval)
+            for src in _FUSED_UNDERLYING_ORDER
+        ]
+        # Tape is raw THETA; synthesized chains carry THETA_DERIVED (local BS
+        # inversion + parity spot from Theta-measured inputs) — both real.
+        options = StoreBackedProvider(
+            store, DataSource.THETA, chain_source=DataSource.THETA_DERIVED
+        )
+        return FusedDataProvider(underlying, options=options)
     source = _STORE_SOURCES[args.provider]
     return StoreBackedProvider(
         ParquetStore(args.store_root), source, symbols=symbols, interval=args.interval
@@ -415,12 +446,14 @@ def _add_run_args(sp: argparse.ArgumentParser) -> None:
     sp.add_argument("--symbols", nargs="*", default=None, help="default: SPX SPY QQQ")
     sp.add_argument("--interval", default="1m")
     sp.add_argument(
-        "--provider", choices=["synthetic", "ibkr-store", "yahoo-store", "theta-store"],
+        "--provider",
+        choices=["synthetic", "ibkr-store", "yahoo-store", "theta-store", "fused-store"],
         default="synthetic",
         help="data source: 'synthetic' (default, deterministic fixture) or replay "
              "REAL data ingested into the store ('ibkr-store'/'yahoo-store' "
-             "underlying, 'theta-store' options). Real-data runs need prior ingestion "
-             "(docs/REAL_DATA.md).",
+             "underlying, 'theta-store' options, 'fused-store' composing "
+             "IBKR->parity->yahoo bars with Theta chain/tape from one store). "
+             "Real-data runs need prior ingestion (docs/REAL_DATA.md).",
     )
     sp.add_argument("--store-root", dest="store_root", default="data_store",
                     help="parquet store root for --provider *-store (default: data_store)")

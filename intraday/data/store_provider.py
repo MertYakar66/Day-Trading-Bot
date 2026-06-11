@@ -36,11 +36,15 @@ class StoreBackedProvider(DataProvider):
         *,
         symbols: list[str] | None = None,
         interval: str = "1m",
+        chain_source: DataSource | None = None,
     ) -> None:
         self.store = store
         self.source = source  # declared provenance of the ingested data (e.g. IBKR)
         self.symbols = [s.upper() for s in symbols] if symbols else None
         self.interval = interval
+        # Chains may carry a different (still real) provenance than the tape:
+        # a synthesized chain is THETA_DERIVED while its raw tape stays THETA.
+        self.chain_source = chain_source if chain_source is not None else source
 
     # -- calendar (from what is actually stored) ------------------------ #
     def _all_symbols(self) -> list[str]:
@@ -79,7 +83,8 @@ class StoreBackedProvider(DataProvider):
 
     def get_option_chain(self, symbol: str, day: date) -> OptionChainSeries:
         chain = self.store.read_chain(symbol, day)
-        self._check_source(chain.source, "option_chain", symbol, day)
+        self._check_source(chain.source, "option_chain", symbol, day,
+                           expected=self.chain_source)
         return chain
 
     def get_option_tape(self, symbol: str, day: date) -> OptionTape:
@@ -87,11 +92,15 @@ class StoreBackedProvider(DataProvider):
         self._check_source(tape.source, "option_tape", symbol, day)
         return tape
 
-    def _check_source(self, got: DataSource, what: str, symbol: str, day: date) -> None:
+    def _check_source(
+        self, got: DataSource, what: str, symbol: str, day: date,
+        *, expected: DataSource | None = None,
+    ) -> None:
         """Never serve a frame under a provenance it was not written with."""
-        if got is not self.source:
+        want = expected if expected is not None else self.source
+        if got is not want:
             raise DataUnavailable(
                 f"provenance mismatch for {what} {symbol} {day}: stored "
-                f"{got.value!r} != declared {self.source.value!r}. Refusing to "
+                f"{got.value!r} != declared {want.value!r}. Refusing to "
                 "relabel data sources."
             )
