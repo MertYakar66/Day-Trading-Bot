@@ -90,7 +90,9 @@ def test_atm_iv_monotone_available_as_session_progresses(spy_chain, day):
 def test_vrp_identity_against_calendar_leg(spy_chain, spy_bars, day):
     as_of = _mid_session(day)
     bars_pit = spy_bars.available_at(as_of)
-    rv_cal = 0.18
+    # Deliberately far from any plausible synthetic intraday RV (~0.15-0.18) so
+    # the leg-separation assertion below cannot pass by fixture coincidence.
+    rv_cal = 0.30
     result = vrp_at(spy_chain, bars_pit, as_of, "1m", rv_calendar=rv_cal)
 
     assert isinstance(result, VRP)
@@ -101,6 +103,7 @@ def test_vrp_identity_against_calendar_leg(spy_chain, spy_bars, day):
     # The intraday rv is carried alongside (sigma_real leg), NEVER subtracted.
     assert result.vrp == pytest.approx(result.atm_iv - rv_cal)
     assert result.rv_calendar == pytest.approx(rv_cal)
+    assert result.rv < 0.25                       # the legs are genuinely different
     assert result.vrp != pytest.approx(result.atm_iv - result.rv)
 
     # Cross-check the components against their primitives directly.

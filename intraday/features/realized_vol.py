@@ -91,8 +91,20 @@ def trailing_session_closes(
     the provider cannot serve that many prior sessions (e.g. the first month of
     a store-backed window) — the consumer stands aside rather than estimate
     calendar vol from a stub history.
+
+    The fetched sessions must also be CONTIGUOUS on the venue calendar: a
+    multi-symbol store provider's calendar is the intersection across its
+    symbols, so another symbol's missing day would otherwise silently punch a
+    hole in THIS symbol's close series and each gap return (spanning 2+ trading
+    days) would be annualized as one. A gapped history returns ``None`` —
+    stand aside, never a quietly-distorted vol.
+
+    ``interval`` must be the same interval the provider's calendar is built on
+    (the CLI constructs store providers with the run interval, keeping them
+    equal); a mismatch fails safe to ``None`` via the missing-partition path.
     """
     from ..data.provider import DataUnavailable, TierUnavailable
+    from ..timeutils import trading_days as venue_trading_days
 
     # Generous calendar lookback so n_sessions trading days fit (weekends,
     # holidays); the provider's own calendar decides what actually exists.
@@ -100,9 +112,12 @@ def trailing_session_closes(
     prior = [d for d in provider.trading_days(start, day - timedelta(days=1)) if d < day]
     if len(prior) < n_sessions:
         return None
+    picked = prior[-n_sessions:]
+    if picked != venue_trading_days(picked[0], picked[-1]):
+        return None  # gapped history -> the close-to-close clock would lie
     closes: list[float] = []
     idx: list[date] = []
-    for d in prior[-n_sessions:]:
+    for d in picked:
         try:
             frame = provider.get_bars(symbol, d, interval).frame
         except (DataUnavailable, TierUnavailable, FileNotFoundError):

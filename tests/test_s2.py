@@ -75,8 +75,8 @@ def test_no_trade_when_gamma_not_positive(gex):
 def test_no_trade_too_close_to_session_close():
     s2 = S2ZeroDteVrp(min_seconds_to_close=1800)
     late = FeatureRow(symbol="SPX", as_of=pd.Timestamp("2026-05-18 19:50:00", tz="UTC"),
-                      last_price=6000.0, atm_iv=0.16, rv=0.10, vrp=0.06,
-                      gamma_regime=GammaRegime.LONG_GAMMA, meta={})
+                      last_price=6000.0, atm_iv=0.16, rv=0.10, rv_calendar=0.10,
+                      vrp=0.06, gamma_regime=GammaRegime.LONG_GAMMA, meta={})
     assert s2.propose(late, config=EngineConfig.default()) is None
 
 
@@ -203,3 +203,32 @@ def test_engine_none_calendar_rv_blocks_s2_even_when_permissive(monkeypatch):
     bt = IntradayBacktester(cfg, prov, [S2ZeroDteVrp(vrp_threshold=-1.0)])
     result = bt.run(["SPY"], date(2026, 5, 4), date(2026, 5, 5), "1m")
     assert len(result.trades) == 0
+    # Stronger than the trade count: propose() itself returned None at every
+    # tick (vrp None never reaches the gate), so NO signal was even recorded.
+    assert len(result.signals) == 0
+
+
+def test_engine_mixed_calendar_availability_is_per_symbol(monkeypatch):
+    """Two-symbol run where only one symbol's calendar leg is computable: the
+    None symbol must stand aside while the other still reaches the gate —
+    rv_cal is per-symbol state, never shared."""
+    from datetime import date
+
+    from intraday.backtest import engine as eng
+    from intraday.backtest.engine import IntradayBacktester
+    from intraday.data.synthetic import SyntheticDataProvider
+    from intraday.features.realized_vol import trailing_session_closes as real_tsc
+
+    def per_symbol(provider, symbol, day, **kwargs):
+        if symbol == "QQQ":
+            return None
+        return real_tsc(provider, symbol, day, **kwargs)
+
+    monkeypatch.setattr(eng, "trailing_session_closes", per_symbol)
+    cfg = EngineConfig.default()
+    prov = SyntheticDataProvider(cfg.data, cfg.session)
+    bt = IntradayBacktester(cfg, prov, [S2ZeroDteVrp(vrp_threshold=-1.0)])
+    result = bt.run(["SPY", "QQQ"], date(2026, 5, 4), date(2026, 5, 5), "1m")
+    assert all(s["symbol"] == "SPY" for s in result.signals)
+    assert len(result.signals) > 0          # SPY's permissive gate did engage
+    assert all(t.symbol == "SPY" for t in result.trades)

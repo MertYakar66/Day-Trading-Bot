@@ -330,12 +330,18 @@ same gate). All still SYNTHETIC, paper-only.
   in the short-to-long zone). One condor per symbol/day (held to close).
 - **Honest retail constraint surfaced**: a wide SPX condor's max loss exceeds the
   1% per-trade risk budget on a $100k account → S2 correctly places NO SPX trade
-  (DESIGN §1 "retail constraints are real"). Demonstrated on SPY: 5-7 defined-risk
-  trades/2wk; net negative on random-walk synthetic (the synthetic VRP signal does
-  not predict the path's realized vol → thesis falsified, like S1/S3 — honest).
+  (DESIGN §1 "retail constraints are real"). Originally demonstrated on SPY at
+  5-7 defined-risk trades/2wk (net negative — thesis falsified on synthetic,
+  honest). **Superseded 2026-06-11 (calendar-clock VRP gate):** the synthetic
+  world's IV is anchored to its INTRADAY clock, so its true calendar-clock VRP
+  is negative — S2 with default knobs now stands aside entirely on synthetic;
+  the condor mechanics are exercised in tests via an explicit permissive
+  threshold (test_phase1.py).
 - **Synthetic realism**: ATM IV anchored to the realized-vol scale with a vol-risk
   premium COUPLED to the gamma skew (positive gamma ⇒ rich VRP — a real market
   linkage), so S2's entry condition can actually occur. Set independently of PnL.
+  (Post-2026-06-11 note: that anchor is intraday-clock, so on the CALENDAR clock
+  the synthetic VRP is negative and the default gate stands aside — see above.)
 - Tests: `tests/test_s2.py` + S2 cases in `tests/test_phase1.py`.
 
 **Adversarial review of S2 (4-lens) — addressed.** Found one HIGH and fixed it:

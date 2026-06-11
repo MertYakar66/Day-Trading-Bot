@@ -269,3 +269,52 @@ def test_trailing_closes_none_when_store_history_too_shallow(tmp_path):
 
     assert trailing_session_closes(prov, "SPY", date(2026, 5, 4), n_sessions=3) is not None
     assert trailing_session_closes(prov, "SPY", date(2026, 5, 4), n_sessions=10) is None
+
+
+def test_calendar_rv_present_at_window_plus_one():
+    import numpy as np
+    import pandas as pd
+
+    rng = np.random.default_rng(11)
+    closes = pd.Series(500.0 * np.exp(np.cumsum(rng.normal(0, 0.01, 22))))
+    rv = calendar_rv(closes, window=21)               # exactly window+1 closes
+    assert rv is not None and math.isfinite(rv) and rv > 0
+
+
+def test_trailing_closes_refuse_gapped_history(monkeypatch):
+    """A hole in the provider calendar (e.g. the symbol-INTERSECTION calendar of
+    a multi-symbol store dropping a day another symbol is missing) must yield
+    None: each gap return spans 2+ trading days but would be annualized as one
+    - stand aside, never a quietly-distorted vol."""
+    from datetime import date
+
+    from intraday.features.realized_vol import trailing_session_closes
+    from intraday.timeutils import trading_days
+
+    prov = _synth_provider()
+    full = trailing_session_closes(prov, "SPY", date(2026, 5, 4), n_sessions=5)
+    assert full is not None                            # contiguous -> fine
+
+    real_days = trading_days(date(2026, 4, 1), date(2026, 5, 3))
+
+    class _Gapped:
+        def trading_days(self, start, end):
+            days = [d for d in real_days if start <= d <= end]
+            return days[:-3] + days[-2:]               # punch out one interior day
+
+        def get_bars(self, symbol, day, interval="1m"):
+            return prov.get_bars(symbol, day, interval)
+
+    assert trailing_session_closes(_Gapped(), "SPY", date(2026, 5, 4), n_sessions=5) is None
+
+
+def test_feature_row_to_dict_exports_rv_calendar():
+    import pandas as pd
+
+    from intraday.features.base import FeatureRow
+
+    fr = FeatureRow(symbol="SPY", as_of=pd.Timestamp("2026-05-04 15:00", tz="UTC"),
+                    rv=0.10, rv_calendar=0.24, atm_iv=0.20, vrp=-0.04, meta={})
+    d = fr.to_dict()
+    assert d["rv_calendar"] == pytest.approx(0.24)
+    assert d["vrp"] == pytest.approx(-0.04)

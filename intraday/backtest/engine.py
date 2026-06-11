@@ -428,6 +428,10 @@ class IntradayBacktester:
                     flip_dist = gs.flip_distance_pct
                     ncw, npw = gs.nearest_call_wall, gs.nearest_put_wall
             if self._needs_rv:
+                # NOTE: this block lives inside the snaps (options) branch — the
+                # gate vrp below needs atm_iv, and the only needs_rv strategy
+                # (S2) also sets needs_options. A future rv-only strategy would
+                # need this hoisted out of the snaps block.
                 # Trailing window only: every SWE RV estimator uses just .tail(window)
                 # / .tail(window+1), so passing the last window+1 bars is identical to
                 # the full session prefix but turns the per-tick cost from O(i) into
