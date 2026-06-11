@@ -27,12 +27,18 @@ def _row(
     last_price=6000.0,
     atm_iv=0.15,
     rv=0.10,
+    rv_calendar=None,
     gamma_regime=GammaRegime.LONG_GAMMA,
     gex_total=1.0e8,  # positive net gamma (vol-suppressing) by default
 ) -> FeatureRow:
+    # The gate VRP compares like clocks: atm_iv - rv_calendar. The intraday rv
+    # is the separate sigma_real leg. Defaulting the calendar leg to the same
+    # number keeps each test's vrp value explicit and unchanged.
+    rv_cal = rv_calendar if rv_calendar is not None else rv
     return FeatureRow(
         symbol=symbol, as_of=AS_OF, last_price=last_price, atm_iv=atm_iv, rv=rv,
-        vrp=(atm_iv - rv), gamma_regime=gamma_regime, gex_total=gex_total, meta={},
+        rv_calendar=rv_cal, vrp=(atm_iv - rv_cal),
+        gamma_regime=gamma_regime, gex_total=gex_total, meta={},
     )
 
 
@@ -135,3 +141,65 @@ def test_no_trade_when_realized_vol_degenerate():
     # rv = 0 => VRP = atm_iv (rich) and gamma positive, so it clears the entry gate,
     # but sigma_real == 0 must trip the honesty guard.
     assert s2.propose(_row(atm_iv=0.16, rv=0.0), config=EngineConfig.default()) is None
+
+
+# --------------------------------------------------------------------------- #
+# Calendar-clock gate regressions (the 2026-06-11 VRP redefinition)
+# --------------------------------------------------------------------------- #
+def test_zero_true_vrp_world_yields_zero_proposals():
+    """THE decisive regression: in a world with zero true VRP (IV equals the
+    correctly-clocked calendar RV) S2 must propose nothing. Under the old
+    intraday-clock gate this world showed a fat positive "VRP" (the measured
+    ~ +18.7 vol-pt artifact) and S2 would have traded it."""
+    s2 = S2ZeroDteVrp()
+    fr = _row(atm_iv=0.20, rv=0.05, rv_calendar=0.20)   # vrp == 0.0 exactly
+    assert fr.vrp == pytest.approx(0.0)
+    assert s2.propose(fr, config=EngineConfig.default()) is None
+    # The OLD definition would have seen +0.15 here - far past any threshold.
+    assert fr.atm_iv - fr.rv == pytest.approx(0.15)
+
+
+def test_unknowable_calendar_leg_stands_aside():
+    """No calendar RV (history shallower than the window) -> vrp None -> stand
+    aside, regardless of how rich IV looks against the intraday clock."""
+    s2 = S2ZeroDteVrp(vrp_threshold=-1.0)               # maximally permissive
+    fr = FeatureRow(
+        symbol="SPX", as_of=AS_OF, last_price=6000.0, atm_iv=0.30, rv=0.05,
+        rv_calendar=None, vrp=None, gamma_regime=GammaRegime.LONG_GAMMA,
+        gex_total=1.0e8, meta={},
+    )
+    assert s2.propose(fr, config=EngineConfig.default()) is None
+
+
+def test_sigma_real_still_uses_the_intraday_clock():
+    """The win-probability projects the remaining move-to-close from fr.rv
+    (intraday clock - no overnight variance can realize before a 0DTE close);
+    the calendar leg must change the GATE, not the projection."""
+    s2 = S2ZeroDteVrp()
+    cfg = EngineConfig.default()
+    a = s2.propose(_row(atm_iv=0.16, rv=0.10, rv_calendar=0.10), config=cfg)
+    b = s2.propose(_row(atm_iv=0.16, rv=0.10, rv_calendar=0.12), config=cfg)
+    assert a is not None and b is not None
+    # Same intraday rv -> identical structure economics and win probability;
+    # only the gate quantity (meta vrp tag, if any) may differ.
+    assert b.win_prob == pytest.approx(a.win_prob)
+    assert b.win_amount == pytest.approx(a.win_amount)
+    assert b.loss_amount == pytest.approx(a.loss_amount)
+
+
+def test_engine_none_calendar_rv_blocks_s2_even_when_permissive(monkeypatch):
+    """Engine path: when trailing history cannot support the calendar leg the
+    per-day rv_cal is None and S2 must never trade - even at a permissive
+    threshold (None propagates, it does not default)."""
+    from datetime import date
+
+    from intraday.backtest import engine as eng
+    from intraday.backtest.engine import IntradayBacktester
+    from intraday.data.synthetic import SyntheticDataProvider
+
+    monkeypatch.setattr(eng, "trailing_session_closes", lambda *a, **k: None)
+    cfg = EngineConfig.default()
+    prov = SyntheticDataProvider(cfg.data, cfg.session)
+    bt = IntradayBacktester(cfg, prov, [S2ZeroDteVrp(vrp_threshold=-1.0)])
+    result = bt.run(["SPY"], date(2026, 5, 4), date(2026, 5, 5), "1m")
+    assert len(result.trades) == 0

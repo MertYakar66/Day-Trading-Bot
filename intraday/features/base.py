@@ -62,8 +62,11 @@ class FeatureRow:
     orb_volume: float | None = None
     # Order-flow imbalance (option tape)
     ofi: float | None = None
-    # Volatility
+    # Volatility. Two RV clocks, two jobs (features.realized_vol docstring):
+    # rv = intraday (S2's move-to-close projection); rv_calendar = close-to-close
+    # calendar clock (IV's comparator); vrp = atm_iv - rv_calendar (gate).
     rv: float | None = None
+    rv_calendar: float | None = None
     atm_iv: float | None = None
     vrp: float | None = None
     # Dealer gamma structure

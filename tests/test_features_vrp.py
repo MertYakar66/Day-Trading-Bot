@@ -87,17 +87,21 @@ def test_atm_iv_monotone_available_as_session_progresses(spy_chain, day):
 # --------------------------------------------------------------------------- #
 # vrp_at
 # --------------------------------------------------------------------------- #
-def test_vrp_identity_when_both_finite(spy_chain, spy_bars, day):
+def test_vrp_identity_against_calendar_leg(spy_chain, spy_bars, day):
     as_of = _mid_session(day)
     bars_pit = spy_bars.available_at(as_of)
-    result = vrp_at(spy_chain, bars_pit, as_of, "1m")
+    rv_cal = 0.18
+    result = vrp_at(spy_chain, bars_pit, as_of, "1m", rv_calendar=rv_cal)
 
     assert isinstance(result, VRP)
     assert result.atm_iv is not None
     assert result.rv is not None
     assert result.vrp is not None
-    # Core identity: vrp = atm_iv - rv, both annualized decimals.
-    assert result.vrp == pytest.approx(result.atm_iv - result.rv)
+    # Core identity: the GATE compares like clocks — vrp = atm_iv - rv_calendar.
+    # The intraday rv is carried alongside (sigma_real leg), NEVER subtracted.
+    assert result.vrp == pytest.approx(result.atm_iv - rv_cal)
+    assert result.rv_calendar == pytest.approx(rv_cal)
+    assert result.vrp != pytest.approx(result.atm_iv - result.rv)
 
     # Cross-check the components against their primitives directly.
     assert result.atm_iv == pytest.approx(atm_iv_at(spy_chain, as_of))
@@ -109,13 +113,27 @@ def test_vrp_identity_when_both_finite(spy_chain, spy_bars, day):
     assert math.isfinite(result.vrp)
 
 
+def test_vrp_none_without_calendar_leg(spy_chain, spy_bars, day):
+    """No calendar RV -> the gate VRP is unknowable (None). The intraday rv must
+    NEVER be substituted as the IV comparator — that substitution was the
+    measured ~ +18.7 vol-pt clock artifact."""
+    as_of = _mid_session(day)
+    bars_pit = spy_bars.available_at(as_of)
+    result = vrp_at(spy_chain, bars_pit, as_of, "1m")
+    assert result.atm_iv is not None
+    assert result.rv is not None          # intraday leg still computes
+    assert result.rv_calendar is None
+    assert result.vrp is None             # gate stands aside
+
+
 def test_vrp_none_iv_before_snapshot(spy_chain, spy_bars, day):
-    """No chain snapshot available -> atm_iv None -> vrp None even if rv exists."""
+    """No chain snapshot available -> atm_iv None -> vrp None even when both RV
+    legs exist."""
     open_utc, _ = session_bounds_utc(day)
     # Pick an as_of with enough bars for RV but before the chain is available is
     # impossible (chain available 1s after open), so build a frame manually: use
     # the full day's bars but evaluate IV at the open.
-    result = vrp_at(spy_chain, spy_bars.frame, open_utc, "1m")
+    result = vrp_at(spy_chain, spy_bars.frame, open_utc, "1m", rv_calendar=0.18)
     assert result.atm_iv is None
     assert result.vrp is None
     # RV may still compute over the supplied bars.
@@ -123,20 +141,21 @@ def test_vrp_none_iv_before_snapshot(spy_chain, spy_bars, day):
 
 
 def test_vrp_none_rv_with_insufficient_bars(spy_chain, spy_bars, day):
-    """Too few bars (< window+1) -> rv None -> vrp None even though IV exists."""
+    """Too few bars (< window+1) -> intraday rv None; the gate VRP is
+    independent of it (calendar leg supplied -> vrp still computes)."""
     as_of = _mid_session(day)
     iv = atm_iv_at(spy_chain, as_of)
     assert iv is not None
     short_bars = spy_bars.frame.head(5)  # < default window (30) + 1
-    result = vrp_at(spy_chain, short_bars, as_of, "1m", window=30)
+    result = vrp_at(spy_chain, short_bars, as_of, "1m", window=30, rv_calendar=0.18)
     assert result.atm_iv == pytest.approx(iv)
     assert result.rv is None
-    assert result.vrp is None
+    assert result.vrp == pytest.approx(iv - 0.18)
 
 
 def test_vrp_window_kwarg_threads_to_rv(spy_chain, spy_bars, day):
     as_of = _mid_session(day)
     bars_pit = spy_bars.available_at(as_of)
-    result = vrp_at(spy_chain, bars_pit, as_of, "1m", window=20)
+    result = vrp_at(spy_chain, bars_pit, as_of, "1m", window=20, rv_calendar=0.18)
     assert result.rv == pytest.approx(intraday_rv(bars_pit, "1m", window=20))
-    assert result.vrp == pytest.approx(result.atm_iv - result.rv)
+    assert result.vrp == pytest.approx(result.atm_iv - 0.18)
