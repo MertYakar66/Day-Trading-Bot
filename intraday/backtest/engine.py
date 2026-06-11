@@ -367,6 +367,21 @@ class IntradayBacktester:
                 risk_free_rate=self.config.gate.risk_free_rate,
             )
             out.append((at, gs, atm_iv_at(chain, at, expiry=day)))
+        if out and not chain.frame.empty and all(
+            gs is None and iv is None for _, gs, iv in out
+        ):
+            # The capture has snapshots but none carries the requested (0DTE)
+            # expiry, so every option feature will be empty all session. Say so
+            # loudly: a tenor-mismatched backfill must not masquerade as a quiet
+            # no-trade day.
+            expiries = sorted(
+                {d.isoformat() for d in pd.to_datetime(chain.frame["expiration"]).dt.date}
+            )
+            logger.warning(
+                "option chain for %s on %s has no %s rows (expiries present: %s); "
+                "GEX/ATM-IV/VRP features will be empty for the session",
+                sym, day, day, ", ".join(expiries),
+            )
         return out
 
     @staticmethod

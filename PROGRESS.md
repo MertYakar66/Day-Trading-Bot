@@ -6,6 +6,42 @@
 
 ---
 
+## Session 2026-06-10 — Audit backlog fixes (fix/audit-backlog)
+
+A 10-dimension adversarially-verified quant audit (107 agents; digest in
+`data_raw/swe_tests_audit_digest.md`) found **no look-ahead and no criticals**,
+plus a confirmed fix backlog. This session ships the four confirmed items, each
+adversarially re-reviewed before merge. **NO-EDGE headline unchanged.**
+
+### What shipped
+
+- **Inception-aware risk metrics** (`metrics.py`, `report/dashboard.py`): the
+  equity curve handed to SWE's performance report now starts at initial capital,
+  so day 1's return is in Sharpe/vol and max drawdown is no longer censored
+  against a day-1 peak (a 10% day-1 loss used to report `max_drawdown 0.0`).
+  Annualization re-derived over the true session count; 1-day runs keep the old
+  `0.0` risk-stat contract instead of leaking NaN; dashboard Sharpe KPI routed
+  through the NaN-safe formatter.
+- **Per-leg fill costs** (`backtest/engine.py`): CLOSE fills no longer re-carry
+  the entry cost (structured settles book 0), and the EOD safety-flatten path
+  appends its CLOSE fill — `sum(fill.cost) == sum(trade.costs)` is now a tested
+  invariant of the persisted ledger.
+- **Expiry discipline** (`features/gex.py`, `vrp.py`, `pipeline.py`, engine):
+  chain reads are restricted to the requested expiry (real multi-expiry captures
+  blended tenors — measured at ~3,000x GEX distortion on SPX+SPXW); an absent
+  tenor returns `None`, a tenor-mismatched capture logs a loud warning, and
+  `pd.Timestamp` expiries are normalized instead of silently matching nothing.
+- **Verdict validity floor** (`eval/stats.py`, `report/comparison.py`):
+  `INSUFFICIENT_DATA_MIN_DAYS` 2 → 20 (documented as a validity floor, not a
+  power guarantee) and comparison rows + page band route through the centralized
+  three-state verdict (new `badge--nodata`). Samples regenerated.
+
+Tests 529 → 544; ruff + mypy clean. Full audit + real-data test results (EOD
+cross-validation, real-chain GEX validation, VRP clock-bias measurement, S1
+pilot, regime stratification) recorded in `data_raw/swe_tests/`.
+
+---
+
 ## Session 2026-06-02 — Report suite: comparison, index, JSON (feat/report-suite)
 
 Autonomous session. Extended the dashboard into a small **report suite** and did a

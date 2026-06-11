@@ -40,6 +40,8 @@ def atm_iv_at(
     if snap.empty:
         return None
     if expiry is not None:
+        # Normalize so a pd.Timestamp cannot silently filter out every row.
+        expiry = pd.Timestamp(expiry).date()
         snap = snap.loc[pd.to_datetime(snap["expiration"]).dt.date == expiry]
         if snap.empty:
             return None

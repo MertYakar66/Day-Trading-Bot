@@ -98,16 +98,42 @@ def test_drawdown_curve_unseeded_keeps_legacy_shape():
     assert dd[1] == pytest.approx(0.0)
 
 
+def test_one_day_run_risk_stats_are_finite(day1_loss_result):
+    """A 1-day run has exactly one return once inception is included; its
+    std(ddof=1) is NaN, which previously leaked into vol/Sharpe/Sortino."""
+    import dataclasses
+    import math
+
+    one_day = dataclasses.replace(
+        day1_loss_result,
+        final_equity=90_000.0,
+        equity_curve=[{"date": "2026-05-04", "portfolio_value": 90_000.0}],
+        n_days=1,
+    )
+    report = build_report(one_day)
+    assert report.volatility == 0.0
+    assert report.sharpe_ratio == 0.0
+    assert report.sortino_ratio == 0.0
+    for field in ("max_drawdown", "annualized_return", "calmar_ratio", "total_return"):
+        assert math.isfinite(getattr(report, field))
+    assert "nan" not in report.render().lower()
+
+
 # --------------------------------------------------------------------------- #
 # 3) Fills ledger: per-leg costs, every OPEN has a CLOSE
 # --------------------------------------------------------------------------- #
-def test_fills_ledger_costs_sum_to_trade_costs():
+@pytest.fixture(scope="module")
+def s3_run() -> BacktestResult:
     config = EngineConfig.default()
     from intraday.data.synthetic import SyntheticDataProvider
 
     provider = SyntheticDataProvider(config.data, config.session)
     bt = IntradayBacktester(config, provider, [S3VwapOrb(entry_z=0.1, edge=0.5)])
-    res = bt.run(["SPY"], date(2026, 5, 4), date(2026, 5, 6), "5m")
+    return bt.run(["SPY"], date(2026, 5, 4), date(2026, 5, 6), "5m")
+
+
+def test_fills_ledger_costs_sum_to_trade_costs(s3_run):
+    res = s3_run
     assert res.trades, "fixture run must produce trades for the invariant to bite"
 
     opens = [f for f in res.fills if f.kind == "OPEN"]
@@ -172,8 +198,43 @@ def test_atm_iv_expiry_filter(spy_chain, day):
     assert atm_iv_at(spy_chain, as_of, expiry=day + timedelta(days=7)) is None
 
 
+def test_pipeline_row_respects_expiry(spy_chain, spy_bars, day, config):
+    """The engine path filters by expiry; the pipeline path must agree (the two
+    are documented as producing identical FeatureRows)."""
+    from intraday.features.pipeline import FeaturePipeline
+
+    pipe = FeaturePipeline(config)
+    as_of = _mid_session(day)
+    clean = pipe.row("SPY", day, as_of, bars=spy_bars, chain=spy_chain, interval="1m")
+    polluted = pipe.row(
+        "SPY", day, as_of, bars=spy_bars, chain=_polluted(spy_chain, day), interval="1m"
+    )
+    assert clean.atm_iv is not None
+    assert polluted.atm_iv == pytest.approx(clean.atm_iv)
+    # A chain that only carries another tenor yields no option features at all.
+    far = spy_chain.frame.copy()
+    far["expiration"] = day + timedelta(days=30)
+    far_only = OptionChainSeries(symbol="SPY", frame=far, source=spy_chain.source)
+    row = pipe.row("SPY", day, as_of, bars=spy_bars, chain=far_only, interval="1m")
+    assert row.atm_iv is None
+    assert row.gex_total is None
+
+
+def test_expiry_accepts_timestamp(spy_chain, day):
+    """pd.Timestamp passes isinstance(date) but never equals a date elementwise —
+    it must be normalized, not silently filter out every row."""
+    as_of = _mid_session(day)
+    a = gamma_structure_at(spy_chain, as_of, expiry=day, ticker="SPY")
+    b = gamma_structure_at(spy_chain, as_of, expiry=pd.Timestamp(day), ticker="SPY")
+    assert a is not None and b is not None
+    assert b.gex_total == pytest.approx(a.gex_total)
+    assert atm_iv_at(spy_chain, as_of, expiry=pd.Timestamp(day)) == pytest.approx(
+        atm_iv_at(spy_chain, as_of)
+    )
+
+
 # --------------------------------------------------------------------------- #
-# Comparison rows route through the centralized three-state verdict
+# Comparison page routes through the centralized three-state verdict
 # --------------------------------------------------------------------------- #
 def test_comparison_badge_is_three_state():
     from intraday.report.comparison import _verdict_badge
@@ -183,3 +244,24 @@ def test_comparison_badge_is_three_state():
     assert "badge--nodata" in _verdict_badge(short_significant)
     assert "EDGE" in _verdict_badge(SimpleNamespace(n_days=150, significant=True))
     assert "no edge" in _verdict_badge(SimpleNamespace(n_days=150, significant=False))
+
+
+def test_comparison_band_never_outranks_row_badges(s3_run):
+    """A sub-floor 'significant' entry must not light the page-level EDGE band
+    while its own row badge abstains."""
+    import dataclasses
+
+    from intraday.eval import evaluate_result
+    from intraday.report.comparison import render_comparison
+
+    metrics = build_report(s3_run)
+    ev = evaluate_result(s3_run, n_trials=2)
+    entries = [
+        {"name": "short-sig", "result": s3_run, "metrics": metrics,
+         "ev": dataclasses.replace(ev, significant=True)},  # 3 days < floor
+        {"name": "long-nosig", "result": s3_run, "metrics": metrics,
+         "ev": dataclasses.replace(ev, n_days=150, significant=False)},
+    ]
+    html = render_comparison(entries, generated_at="2026-06-10T12:00:00")
+    assert "AT LEAST ONE EDGE" not in html
+    assert "badge--nodata" in html  # the sub-floor row abstains in the table

@@ -217,7 +217,8 @@ def _render(out: dict) -> str:
           f"(train SR {o['train_sharpe_ann']:.2f}) -> TEST SR {o['test_sharpe_ann']:.2f}, "
           f"t={o['test_t_stat']:.2f}, net ${o['test_total_net']:.0f}",
           " Verdict: DSR(all) >= 0.95 is the formal edge criterion (the sole authority,"
-          " as on every other surface); OOS test SR > 0 with t ~>= 2 is corroborating.",
+          " as on every other surface, subject to the INSUFFICIENT_DATA_MIN_DAYS validity"
+          " floor); OOS test SR > 0 with t ~>= 2 is corroborating.",
           " Note: t/PSR/DSR assume serially-independent daily PnL; positive day-to-day",
           "       autocorrelation biases them upward - the bootstrap Sharpe CI is the",
           "       autocorrelation-robust counterweight.",

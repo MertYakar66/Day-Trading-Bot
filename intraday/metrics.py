@@ -126,6 +126,16 @@ def build_report(result: BacktestResult) -> MetricsReport:
     n_sessions = max(result.n_days, 1)
     annualized_return = ((1.0 + swe.total_return) ** (252.0 / n_sessions)) - 1.0
     calmar_ratio = annualized_return / swe.max_drawdown if swe.max_drawdown > 0 else 0.0
+    # A single session yields exactly one return once inception is included, and a
+    # 1-element std(ddof=1) is NaN — which slips past SWE's empty/zero guards into
+    # Sharpe/Sortino/volatility. Keep the pre-inception contract for the degenerate
+    # case: risk stats on one day are 0.0, not NaN.
+    if result.n_days < 2:
+        volatility = sharpe_ratio = sortino_ratio = 0.0
+    else:
+        volatility = swe.volatility
+        sharpe_ratio = swe.sharpe_ratio
+        sortino_ratio = swe.sortino_ratio
 
     gross = sum(t.gross_pnl for t in result.trades)
     costs = sum(t.costs for t in result.trades)
@@ -165,9 +175,9 @@ def build_report(result: BacktestResult) -> MetricsReport:
         cost_bps_of_notional=cost_bps_of_notional,
         total_return=swe.total_return,
         annualized_return=annualized_return,
-        volatility=swe.volatility,
-        sharpe_ratio=swe.sharpe_ratio,
-        sortino_ratio=swe.sortino_ratio,
+        volatility=volatility,
+        sharpe_ratio=sharpe_ratio,
+        sortino_ratio=sortino_ratio,
         max_drawdown=swe.max_drawdown,
         calmar_ratio=calmar_ratio,
         total_trades=n,

@@ -16,7 +16,7 @@ from collections.abc import Mapping, Sequence
 
 from ..backtest.engine import BacktestResult
 from ..eval import evaluate_result
-from ..eval.stats import INSUFFICIENT_DATA_MIN_DAYS, edge_verdict
+from ..eval.stats import edge_verdict
 from ..metrics import build_report
 from . import svg
 from .dashboard import _banner, _cls, _esc, _fnum, _signed_money
@@ -108,8 +108,12 @@ def render_comparison(
         key=lambda i: (entries[i]["ev"].sharpe_ann, entries[i]["metrics"].net_pnl),
     )
 
-    any_edge = any(e["ev"].significant for e in entries)
-    insufficient = all(e["ev"].n_days < INSUFFICIENT_DATA_MIN_DAYS for e in entries)
+    # The page band keys off the same centralized three-state verdict as the row
+    # badges, so a sub-floor "significant" run can never light an EDGE band above
+    # rows that all abstain.
+    verdicts = [edge_verdict(e["ev"]) for e in entries]
+    any_edge = "EDGE" in verdicts
+    insufficient = all(v == "INSUFFICIENT_DATA" for v in verdicts)
     rm = run_meta or {}
     first = entries[0]["result"]
     meta_bits = [

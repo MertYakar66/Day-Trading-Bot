@@ -45,6 +45,9 @@ def gamma_structure_at(
     """Compute the dealer gamma structure from the latest snapshot available at
     ``as_of``. Returns ``None`` if no snapshot has arrived yet.
     """
+    # Normalize so a pd.Timestamp (which passes isinstance(date) but never
+    # equals a date elementwise) cannot silently filter out every row.
+    expiry = pd.Timestamp(expiry).date()
     snap = chain.latest_available(as_of)
     if snap.empty:
         return None

@@ -7,7 +7,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Post-0.1.0 hardening from a second audit pass (no version bump yet; the **NO-EDGE
-headline is unchanged**). Tests 487 → 529 → 540.
+headline is unchanged**). Tests 487 → 529 → 544.
 
 ### Fixed (2026-06-10 adversarially-verified audit, PR fix/audit-backlog)
 - **Risk metrics dropped the inception point**: the equity curve handed to SWE's
@@ -40,6 +40,16 @@ headline is unchanged**). Tests 487 → 529 → 540.
   through `eval.edge_verdict` (new neutral `badge--nodata` style), so a too-short
   run reads "insufficient data" in the table exactly as the page band does,
   instead of a definitive binary "no edge".
+- **Adversarial review pass on the above** (own findings, fixed before merge):
+  1-day runs no longer leak NaN volatility/Sharpe/Sortino through SWE's guards
+  (the pre-inception `0.0` contract is kept, and the dashboard Sharpe KPI uses
+  the NaN-safe formatter); `FeaturePipeline.row` passes the expiry through to
+  `vrp_at` so the pipeline path agrees with the engine path on multi-expiry
+  chains; the comparison page-level band keys off the same centralized verdict
+  as its rows; `pd.Timestamp` expiries are normalized (they pass
+  `isinstance(date)` but never equal a `date` elementwise, silently filtering
+  every row); a tenor-mismatched chain capture now logs a loud warning instead
+  of masquerading as a quiet no-trade session; samples regenerated.
 
 ### Fixed
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules
