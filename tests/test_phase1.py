@@ -55,12 +55,27 @@ def test_s1_signals_carry_regime_context():
     assert all(s["strategy_id"] == "S1_gamma_regime" for s in result.signals)
 
 
-def test_s2_defined_risk_condor_end_to_end():
-    """S2 trades 0DTE defined-risk condors on SPY (fits a 100k account), settles
-    binary at the close, and NEVER loses more than the defined max risk."""
+def test_s2_stands_aside_on_negative_calendar_vrp():
+    """The synthetic world's IV is anchored to its INTRADAY clock, so on the
+    calendar clock its true VRP is negative — S2 with default knobs must stand
+    aside entirely (the engine no longer trades the +18.7-pt clock artifact)."""
     cfg = EngineConfig.default()
     prov = SyntheticDataProvider(cfg.data, cfg.session)
     bt = IntradayBacktester(cfg, prov, [S2ZeroDteVrp()])
+    result = bt.run(["SPY"], date(2026, 5, 4), date(2026, 5, 8), "1m")
+    assert len(result.trades) == 0
+
+
+def test_s2_defined_risk_condor_end_to_end():
+    """S2 trades 0DTE defined-risk condors on SPY (fits a 100k account), settles
+    binary at the close, and NEVER loses more than the defined max risk.
+
+    The synthetic world's calendar-clock VRP is negative (see the stand-aside
+    test above), so the condor MECHANICS are exercised with a permissive test
+    threshold — the gate/threshold semantics live in test_s2.py."""
+    cfg = EngineConfig.default()
+    prov = SyntheticDataProvider(cfg.data, cfg.session)
+    bt = IntradayBacktester(cfg, prov, [S2ZeroDteVrp(vrp_threshold=-0.20)])
     result = bt.run(["SPY"], date(2026, 5, 4), date(2026, 5, 8), "1m")
 
     assert len(result.trades) > 0, "expected S2 to place at least one condor"
@@ -78,9 +93,10 @@ def test_s2_defined_risk_condor_end_to_end():
 
 def test_s2_sizes_to_zero_on_spx_for_small_account():
     """Honest retail constraint: a wide SPX 0DTE condor's max loss exceeds the 1%
-    per-trade risk budget on a 100k account, so S2 correctly places NO SPX trade."""
+    per-trade risk budget on a 100k account, so S2 correctly places NO SPX trade.
+    (Permissive threshold so the zero comes from SIZING, not the VRP gate.)"""
     cfg = EngineConfig.default()
     prov = SyntheticDataProvider(cfg.data, cfg.session)
-    bt = IntradayBacktester(cfg, prov, [S2ZeroDteVrp()])
+    bt = IntradayBacktester(cfg, prov, [S2ZeroDteVrp(vrp_threshold=-0.20)])
     result = bt.run(["SPX"], date(2026, 5, 4), date(2026, 5, 6), "1m")
     assert len(result.trades) == 0

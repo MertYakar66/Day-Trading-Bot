@@ -180,8 +180,13 @@ All features are recomputed on intraday data; the math already exists upstream.
   trending tape.* This regime sign is the master switch for §5.
 - **Order-flow imbalance (OFI):** from the tape's `side_inferred`,
   `OFI = (buy_vol − sell_vol) / (buy_vol + sell_vol)` over a rolling window.
-- **Volatility risk premium (VRP):** ATM IV (chain) − intraday realized vol
-  (Yang-Zhang on 1–5 min bars), per horizon.
+- **Volatility risk premium (VRP):** ATM IV (chain) − **calendar-clock**
+  realized vol (close-to-close over the prior ~21 sessions). IV diffuses on
+  the calendar clock; intraday RTH-only RV excludes overnight variance and
+  comparing the two carried a measured ~ +18.7 vol-pt artifact (2026-06-10
+  audit). The intraday RV (Garman-Klass on 1–5 min bars) is retained as a
+  separate feature — it is the correct clock for projecting a 0DTE's
+  remaining move-to-close (S2's `sigma_real`), never the IV comparator.
 - **Skew / term-structure dislocation:** deviation of current skew/term slope
   from its intraday trailing mean (`skew_dynamics.py`).
 - **VWAP & bands:** session VWAP and ±k·σ_intraday envelopes.
@@ -215,7 +220,9 @@ on minute-to-hours timescales, not microseconds).
 
 - **Thesis:** 0DTE IV is frequently mispriced vs realized intraday vol,
   conditional on regime.
-- **Signal:** VRP (ATM IV − intraday RV) and skew dislocation, gated by GEX sign.
+- **Signal:** VRP (ATM IV − calendar-clock RV; §4) and skew dislocation, gated
+  by GEX sign. The entry threshold is an uncalibrated conservative placeholder
+  until real 0DTE IV history exists (Theta-gated).
 - **Entry:** when VRP is richly positive *and* gamma is positive (vol-suppressing
   regime), lean short premium via a defined-risk structure; when VRP is negative
   *and* gamma negative, lean the other way. Defined-risk only (no naked short

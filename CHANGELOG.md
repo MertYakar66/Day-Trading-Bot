@@ -51,6 +51,25 @@ headline is unchanged**). Tests 487 → 529 → 544.
   every row); a tenor-mismatched chain capture now logs a loud warning instead
   of masquerading as a quiet no-trade session; samples regenerated.
 
+### Changed (2026-06-11, PR feat/s2-calendar-vrp)
+- **S2's VRP gate now compares like clocks** (audit-measured defect): ATM IV is
+  calendar-clock while the intraday Garman-Klass RV excludes overnight variance;
+  their difference carried a ~ +18.7 vol-pt bias (12/12 real tickers) that made
+  the pilot "+0.19 VRP" ~98% artifact. The gate quantity is now
+  `vrp = atm_iv − rv_calendar` (close-to-close over the prior 21 sessions, a
+  per-day constant computed from strictly-prior sessions — PIT-safe at the
+  open, contiguity-checked against the venue calendar, `None`/stand-aside on
+  shallow or gapped history). The intraday `rv` is retained as a separate
+  `FeatureRow` field — the correct clock for projecting a 0DTE's remaining
+  move-to-close (S2's `sigma_real`), never the IV comparator. `vrp_threshold`
+  is explicitly an uncalibrated conservative placeholder until real 0DTE IV
+  history exists (Theta-gated). Honest consequence, pinned by test: the
+  synthetic world's true calendar-clock VRP is NEGATIVE, so S2 with default
+  knobs now stands aside on synthetic (it previously traded the artifact);
+  the decisive regression is a zero-true-VRP world producing zero proposals.
+  DESIGN §4/§5 updated to match. Adversarially reviewed (clock/math + PIT
+  lenses + coverage audit); all confirmed findings fixed pre-PR.
+
 ### Fixed
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules
   (`packages = ["intraday"]`), dropping every subpackage — a clean `pip install`'d

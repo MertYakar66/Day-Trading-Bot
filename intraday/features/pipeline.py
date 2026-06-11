@@ -51,12 +51,16 @@ class FeaturePipeline:
         ofi_lookback_min: int = 5,
         rv_window: int = 30,
         rv_estimator: str = "garman_klass",
+        calendar_rv_window: int = 21,
     ) -> None:
         self.config = config or EngineConfig.default()
         self.orb_minutes = orb_minutes
         self.ofi_lookback = pd.Timedelta(minutes=ofi_lookback_min)
         self.rv_window = rv_window
         self.rv_estimator = rv_estimator
+        # Daily close-to-close returns for the calendar-clock RV leg (the IV
+        # comparator in vrp = atm_iv - rv_calendar); ~1 month default.
+        self.calendar_rv_window = calendar_rv_window
 
     def precompute(self, bars: BarSeries, day: date) -> SessionFeatures:
         open_utc, _ = session_bounds_utc(day, self.config.session)
@@ -80,7 +84,12 @@ class FeaturePipeline:
         chain: OptionChainSeries | None = None,
         tape: OptionTape | None = None,
         interval: str = "1m",
+        rv_calendar: float | None = None,
     ) -> FeatureRow:
+        """``rv_calendar`` is the per-day calendar-clock RV constant (see
+        :func:`..features.realized_vol.calendar_rv`); callers with a provider
+        compute it once per (symbol, day) via ``trailing_session_closes``.
+        Without it the gate VRP stays ``None`` (stand aside)."""
         sf = session or self.precompute(bars, day)
         lat = sf.bar_latency
 
@@ -106,6 +115,7 @@ class FeaturePipeline:
                     chain, pit_bars, as_of, interval,
                     window=self.rv_window, estimator=self.rv_estimator,
                     session=self.config.session, expiry=day,
+                    rv_calendar=rv_calendar,
                 )
                 atm_iv, rv, vrp_val = v.atm_iv, v.rv, v.vrp
             except ImportError:  # pragma: no cover - SWE always present in runs
@@ -136,6 +146,7 @@ class FeaturePipeline:
             orb_volume=orb_vol,
             ofi=ofi,
             rv=rv,
+            rv_calendar=rv_calendar,
             atm_iv=atm_iv,
             vrp=vrp_val,
             gex_total=gex_total,

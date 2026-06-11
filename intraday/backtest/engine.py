@@ -45,7 +45,7 @@ from ..features.base import FeatureRow
 from ..features.gex import gamma_structure_at
 from ..features.ofi import ofi_at
 from ..features.pipeline import FeaturePipeline
-from ..features.realized_vol import intraday_rv
+from ..features.realized_vol import calendar_rv, intraday_rv, trailing_session_closes
 from ..features.vrp import atm_iv_at
 from ..logging_config import get_logger
 from ..risk.sizing import kelly_size
@@ -179,6 +179,18 @@ class IntradayBacktester:
             if self._needs_options:
                 loaded[sym]["tape"] = self.provider.get_option_tape(sym, day)
                 loaded[sym]["snaps"] = self._precompute_snapshots(sym, day)
+            if self._needs_rv:
+                # Per-day constant: the calendar-clock RV leg of the VRP gate
+                # (close-to-close over strictly-prior sessions — PIT-safe at
+                # the open). None when the provider's history is shallower
+                # than the window: the gate VRP is then unknowable and the
+                # VRP strategy stands aside (never the intraday clock as a
+                # substitute — that was the measured +18.7 vol-pt artifact).
+                w = self.pipeline.calendar_rv_window
+                closes = trailing_session_closes(
+                    self.provider, sym, day, n_sessions=w + 1, interval=interval
+                )
+                loaded[sym]["rv_cal"] = calendar_rv(closes, window=w)
 
         ref = loaded[symbols[0]]
         index = ref["frame"].index
@@ -402,6 +414,7 @@ class IntradayBacktester:
         sf = d["sf"]
 
         ofi = atm_iv = rv = vrp = gex_total = flip = flip_dist = ncw = npw = None
+        rv_cal: float | None = d.get("rv_cal")
         regime: GammaRegime | None = None
         if "snaps" in d:
             ofi = ofi_at(d["tape"], as_of, self.pipeline.ofi_lookback)
@@ -415,6 +428,10 @@ class IntradayBacktester:
                     flip_dist = gs.flip_distance_pct
                     ncw, npw = gs.nearest_call_wall, gs.nearest_put_wall
             if self._needs_rv:
+                # NOTE: this block lives inside the snaps (options) branch — the
+                # gate vrp below needs atm_iv, and the only needs_rv strategy
+                # (S2) also sets needs_options. A future rv-only strategy would
+                # need this hoisted out of the snaps block.
                 # Trailing window only: every SWE RV estimator uses just .tail(window)
                 # / .tail(window+1), so passing the last window+1 bars is identical to
                 # the full session prefix but turns the per-tick cost from O(i) into
@@ -425,8 +442,10 @@ class IntradayBacktester:
                     window=rv_window, estimator=self.pipeline.rv_estimator,
                     session=self.config.session,
                 )
-                if rv is not None and atm_iv is not None:
-                    vrp = atm_iv - rv
+                # Gate VRP compares LIKE clocks: IV (calendar) minus calendar
+                # RV. The intraday rv above stays on the row for sigma_real.
+                if rv_cal is not None and atm_iv is not None:
+                    vrp = atm_iv - rv_cal
 
         return FeatureRow(
             symbol=sym,
@@ -440,6 +459,7 @@ class IntradayBacktester:
             orb_volume=(sf.opening_range.volume if orb_known else None),
             ofi=ofi,
             rv=rv,
+            rv_calendar=rv_cal,
             atm_iv=atm_iv,
             vrp=vrp,
             gex_total=gex_total,

@@ -1,10 +1,26 @@
 """S2 — 0DTE volatility relative-value, DEFINED-RISK ONLY (DESIGN.md §5 S2).
 
-Thesis: 0DTE implied vol is frequently rich vs intraday realized vol, conditional
-on the dealer-gamma regime. When VRP (= ATM IV − intraday RV) is richly positive
-AND the regime is positive-gamma (vol-suppressing / mean-reverting), S2 SELLS
-premium via a **defined-risk short iron condor** (short strikes ±k·σ, long wings
-beyond) — never naked short gamma; the wings cap the loss.
+Thesis: 0DTE implied vol is frequently rich vs realized vol measured ON THE
+SAME CLOCK, conditional on the dealer-gamma regime. When VRP
+(= ATM IV − **calendar-clock** close-to-close RV; see ``features.vrp``) is
+richly positive AND the regime is positive-gamma (vol-suppressing /
+mean-reverting), S2 SELLS premium via a **defined-risk short iron condor**
+(short strikes ±k·σ, long wings beyond) — never naked short gamma; the wings
+cap the loss.
+
+The clock split is deliberate and load-bearing:
+- The **gate** (``fr.vrp``) compares IV against calendar-clock RV — comparing
+  against intraday RTH-only RV carried a measured ~ +18.7 vol-pt bias that
+  made the pilot's "+VRP" ~98% artifact (S2 must not trade an artifact).
+- The **win-probability** (``sigma_real`` below) projects the remaining
+  move-to-close from the INTRADAY clock (``fr.rv``) — correct for a position
+  that dies at today's close, before any overnight variance can realize.
+
+CALIBRATION NOTE: ``vrp_threshold`` (0.02) is a conservative placeholder. The
+honest threshold needs real 0DTE ATM-IV history (Theta-gated); on real
+single-name data the same-clock VRP mean measured ~ −0.46 vol pts, so at this
+threshold S2 is expected to trade RARELY on real data until calibrated. That
+is by design — standing aside beats trading a clock artifact.
 
 Honesty (same discipline as S1/S3, see PROGRESS.md):
 - The structure is priced from the chain's ATM IV via Black-Scholes (SWE
