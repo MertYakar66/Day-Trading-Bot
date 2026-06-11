@@ -6,6 +6,54 @@
 
 ---
 
+## Session 2026-06-11 — Theta capture path (feat/theta-backfill-pipeline)
+
+Theta is busy ~2 more weeks; this session converts the wait into readiness. A
+design panel (architecture + adversarial PIT/math spec + schema extraction)
+found the documented capture plan was **unexecutable** (the SWE puller cannot
+pull historical dates; the runbook's flags were placeholders; no chain-snapshot
+path existed; no theta→store ingest; the replay command refused mixed
+provenance). All of it is now built, offline-tested, and adversarially reviewed
+(5-lens panel; the look-ahead lens returned **zero findings**; every confirmed
+finding from the other lenses fixed pre-PR).
+
+### What shipped
+
+- **`scripts/pull_theta_tape_scoped.py`** — operator-only, doubly-gated puller:
+  historical `--start/--end`, per-session expiry resolution (0DTE when listed,
+  else nearest on-or-after), `trade_quote` trades (prevailing NBBO → real
+  PIT-safe `side_inferred`; `/trade` fallback degrades to `"mid"`), 1m quotes +
+  daily OI, per-partition manifests, `--resume`, `--probe-day`, loud journaled
+  failures, strike-unit cross-checks, vendor-tree write guard.
+- **`intraday/data/chain_synthesis.py`** (pure core) + **`scripts/
+  ingest_theta_options.py`** (thin CLI): synthesized chain snapshots
+  (`DataSource.THETA_DERIVED`) from quote mids + BS-inverted IV **at the GEX
+  consumer's clock** (`max(days,1)/365` — a decaying T would diverge toward the
+  close) + parity spot + strictly-prior-session OI. Honest refusals throughout
+  (no parity pair → snapshot dropped; junk/failed inversions counted; non-0DTE
+  chains refused; SPX refused; systematic OI key mismatch raises). A refused
+  session writes NOTHING (no tape without its chain).
+- **`--provider fused-store`**: IBKR→parity→yahoo bars + Theta options from one
+  store; fused calendar is now the UNION of underlying calendars; per-kind
+  `chain_source` provenance on `StoreBackedProvider`; loud-before-compute
+  preflight when an options strategy meets sessions with no chain.
+- **`docs/OPERATOR_RUNBOOK.md`** rewritten around the real commands
+  (probe-first; budget from the probe, not the estimate).
+- Also this session (separate PRs): poller decision persistence + the daily
+  prospective routine (`docs/DAILY_ROUTINE.md`, PR #27); Yahoo store extended
+  to 66 sessions and the powered eval re-run — **NO-EDGE reinforced** (all
+  three underlying-only strategies net-negative; DSR 0.000 across 72 trials).
+
+### Deferred (noted in review, not blockers)
+
+- Plumb per-symbol dividend yield into the GEX analyzer (residual gamma error
+  measured < 0.04% at exercised tenors).
+- Surface THETA_DERIVED in the report dashboard's provenance line for fused runs.
+- An `OptionQuotes` PIT container the moment any engine feature reads the
+  `option_quotes` slot.
+
+---
+
 ## Session 2026-06-10 — Audit backlog fixes (fix/audit-backlog)
 
 A 10-dimension adversarially-verified quant audit (107 agents; digest in

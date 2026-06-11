@@ -108,7 +108,29 @@ def test_options_without_provider_raises():
         fused.get_option_chain("SPX", DAY)
 
 
-def test_trading_days_delegates_to_primary():
+def test_trading_days_is_union_of_calendars():
+    """get_bars falls back through ALL providers, so the calendar must be the
+    union — delegating to the first would hide deep-history sessions a fallback
+    (e.g. parity) carries behind a shallow primary (e.g. IBKR)."""
+
+    class _Calendar(_Stub):
+        def __init__(self, source, days):
+            super().__init__(source)
+            self.days = days
+
+        def trading_days(self, start, end):
+            return [d for d in self.days if start <= d <= end]
+
+    d1, d2, d3 = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)
+    fused = FusedDataProvider([
+        _Calendar(DataSource.IBKR, [d3]),            # shallow recent store
+        _Calendar(DataSource.PARITY, [d1, d2]),      # deep history fallback
+    ])
+    assert fused.trading_days(d1, d3) == [d1, d2, d3]
+    assert fused.trading_days(d2, d2) == [d2]
+
+
+def test_trading_days_full_calendar_stubs_match_baseline():
     fused = FusedDataProvider([_Stub(DataSource.IBKR), _Stub(DataSource.PARITY)])
     assert fused.trading_days(date(2026, 6, 1), date(2026, 6, 5)) == trading_days(
         date(2026, 6, 1), date(2026, 6, 5)

@@ -76,6 +76,43 @@ headline is unchanged**). Tests 487 → 529 → 544.
   session is never mislabelled solid `[REAL DATA: parity]`.
 
 ### Added
+- **The Theta capture path is now executable end-to-end** (audit gaps G1–G11; it
+  previously existed only as docs with fabricated flags):
+  - `scripts/pull_theta_tape_scoped.py` — operator-only, doubly-gated backfill
+    puller with historical `--start/--end`, PER-SESSION expiration resolution
+    (0DTE when listed, else nearest on-or-after), trades via `trade_quote`
+    (prevailing NBBO → real, PIT-safe `side_inferred`; `/trade` fallback
+    degrades honestly to `"mid"`), 1m quote bars + daily OI, per-partition
+    manifests, `--resume`, `--probe-day`, and loud per-partition failures.
+    Output under `data_raw/theta/` (never inside read-only `vendor/`).
+  - `scripts/ingest_theta_options.py` — network-free ingest: tape (THETA,
+    `available_ts` stamped), quotes (new `option_quotes` store slot), and
+    **synthesized chain snapshots** (`DataSource.THETA_DERIVED`): quote mids +
+    locally BS-inverted IV (at the GEX consumer's `max(days,1)/365` clock — a
+    decaying T would diverge toward the close) + parity spot + PRIOR-session OI
+    (day-D EOD OI is a future fact intraday). Refuses non-0DTE-only chains and
+    SPX/SPXW synthesis; failed inversions are dropped and counted, never
+    placeholdered. Optional `--parity-bars` never clobbers IBKR partitions.
+  - `--provider fused-store` — composes IBKR→parity→yahoo underlying bars with
+    Theta options from one store (the single-source `theta-store` provider
+    rightly refuses such mixed-provenance stores); `FusedDataProvider`'s
+    calendar is now the UNION of its underlying calendars (a shallow primary no
+    longer hides a deep parity backfill); `StoreBackedProvider` gained a
+    `chain_source` override so raw THETA tape and THETA_DERIVED chains serve
+    from one provider without relabelling.
+  - `docs/OPERATOR_RUNBOOK.md` rewritten around the real, verified commands
+    (probe-first discipline; budget from the probe, not the estimate).
+  - **Adversarially reviewed pre-PR** (5-lens panel): the look-ahead lens
+    returned zero findings; every confirmed finding elsewhere was fixed —
+    per-partition ingest resilience (an incomplete raw partition is skipped
+    loudly, never a run-aborting crash), atomic per-session ingest (a refused
+    chain writes nothing), OI join keys rounded (a strike-representation drift
+    can no longer silently zero all gamma — and matching ZERO contracts against
+    a non-empty OI table now raises), strike-unit mismatches across endpoints
+    are loud, expiration-listing failures are journaled per-symbol, the
+    fused-store preflight fails options runs up front on chain-less sessions,
+    and the pure synthesis core moved into `intraday/data/chain_synthesis.py`
+    (the `ibkr.py` layering precedent).
 - Eval honesty disclosures: an i.i.d. serial-dependence caveat (the stationary
   bootstrap CI is named as the short-range-robust counterweight) and a small-`n_trials`
   caveat on a green EDGE verdict.

@@ -8,84 +8,113 @@ only ever READS the resulting parquet.
 > Cost reality: Options-STANDARD is ~$80/mo, recurring (not owned). The pull MUST
 > fit one billing month at the tier's concurrency. Cancel after if desired.
 
+The pull/ingest/replay path is **bot-side and fully wired** (the older SWE
+puller cannot pull historical dates and writes inside read-only `vendor/`):
+
+| step | tool | network |
+| --- | --- | --- |
+| capture | `scripts/pull_theta_tape_scoped.py` (gated) | Theta Terminal only |
+| ingest  | `scripts/ingest_theta_options.py` | none |
+| replay  | `python -m intraday backtest --provider fused-store` | none |
+
 ## 0. Preconditions
 
 - Theta **Terminal running** locally and reachable at `127.0.0.1:25503`.
-- Subscription = **Options-STANDARD** (intraday option tape + IV + greeks).
+- Subscription = **Options-STANDARD** (intraday option tape + quotes + daily OI).
 - You are **not** mid-pull elsewhere — coordinate concurrency; do not collide with
   your own interactive use.
-- `vendor/swe` present (the puller is `vendor/swe/scripts/pull_theta_option_tape.py`).
 
-## 1. Review the scoped plan (no socket opened)
-
-```bash
-python -m scripts.pull_theta_options_scoped \
-    --symbols SPX SPY QQQ --start 2022-01-03 --end 2026-06-01 \
-    --strikes-each-side 10 --max-concurrency 4
-```
-
-This prints the work-list (symbols × sessions), an order-of-magnitude
-disk/time estimate, and the recommended SWE puller invocations. **Scope (do not
-widen — it blows the month):**
-
-- symbols: **SPX, SPY, QQQ**  · strikes: **ATM ± 10**  · expiries: **0DTE + near-dated**
-- window: **2022 → today** (the 0DTE era; do NOT pull pre-2022 or full-chain wings)
-- concurrency: **≤ tier limit** (start at 4; back off if throttled)
-- plus a small, fast pull of broad EOD option greeks/IV for context (optional)
-
-## 2. Confirm the SWE CLI flags (one-time)
-
-The planner's commands use **placeholder** flag names (`# TODO(operator)`). Open
-`vendor/swe/scripts/pull_theta_option_tape.py` and confirm the real `argparse`
-flags (symbol/date/strike-window/expiry selection). The puller writes:
-
-```
-data_processed/theta/option_tape/ticker=<SYM>/date=<YYYY-MM-DD>/
-    trades.parquet   # ts, expiration, strike, right, price, size, exchange,
-                     # condition, nbbo_bid, nbbo_ask, side_inferred
-    quotes.parquet   # ts, expiration, strike, right, bid, ask, bid_size, ask_size, mid
-```
-
-(Prices are per-share option premium — apply ×100 for notional. `side_inferred`:
-"buy" = customer buy-initiated = dealer sells.)
-
-## 3. Run the pull (gated, day-by-day, low concurrency)
-
-Validate on a **few recent days first**, measure size/time, then backfill. Respect
-Theta concurrency — if the throughput chokes your interactive pulls, lower it.
+## 1. Review the plan (no socket opened — the default is a dry run)
 
 ```bash
-# Per (symbol, day), at ≤4 concurrency. Example shape (confirm flags in step 2):
-python vendor/swe/scripts/pull_theta_option_tape.py --symbol SPY --date 2026-05-29 ...
+python -m scripts.pull_theta_tape_scoped --symbols SPY QQQ \
+    --start 2022-01-03 --end 2026-06-01 --strikes-each-side 10
 ```
 
-The scoped planner refuses to execute even with `THETA_OPERATOR_CONFIRM=1` and
-`--i-understand-this-pulls-live-theta` — by design it will not fabricate the SWE
-flags or open a socket. You run the verified invocations yourself.
+Without the double gate this prints the work-list and never constructs an HTTP
+client. **Scope (do not widen — it blows the month):**
 
-## 4. Ingest into the engine store (network-free)
+- symbols: **SPY, QQQ** (the GEX spine; SPX weeklies live under root SPXW and
+  prior SPXW captures carried junk OI — pull SPX only as context, never for GEX)
+- strikes: **ATM ± 10** (server-side `strike_range`) · quote cadence: **1m**
+- window: **2022 → today** (the 0DTE era; expirations resolve **per session** —
+  0DTE when listed, else nearest on-or-after)
+- per session: tick trades **with prevailing NBBO** (`trade_quote`), 1m quote
+  bars, and the daily open-interest file
 
-Once `trades.parquet`/`quotes.parquet` exist, load them into the engine's
-`ticker=/date=` store as `DataSource.THETA` (option tape/chain), then reconstruct
-deep-history **underlying** via put-call parity
-(`intraday.data.parity.ParityUnderlyingProvider`). See
-[`REAL_DATA.md`](REAL_DATA.md) §4.
+## 2. Probe ONE session first (mandatory)
+
+The `trade_quote` response shape and the strike unit are unverified on this
+account tier. Probe exactly one recent session and read its manifest before any
+backfill:
+
+```bash
+set THETA_OPERATOR_CONFIRM=1
+python -m scripts.pull_theta_tape_scoped --probe-day 2026-06-08 --symbols SPY QQQ \
+    --i-understand-this-pulls-live-theta
+```
+
+Then inspect `data_raw/theta/ticker=SPY/date=2026-06-08/_manifest.json`:
+
+- `endpoints.trades` should be `/v3/option/history/trade_quote`; if it fell back
+  to `/trade`, every `side_inferred` is `"mid"` and options order-flow is dead —
+  investigate before pulling a month of tape.
+- `strike_divisor` records the unit auto-detection (1 = dollars, 1000 = millis).
+- `rows` + file sizes calibrate the real cost; planner estimates can be 10–100×
+  low. Budget the backfill from the probe, not the estimate.
+
+## 3. Run the backfill (gated, resumable, loud failures)
+
+```bash
+python -m scripts.pull_theta_tape_scoped --symbols SPY QQQ \
+    --start 2022-01-03 --end 2026-06-01 --strikes-each-side 10 \
+    --workers 2 --resume --i-understand-this-pulls-live-theta
+```
+
+Failures are per-partition and recorded in `_runs.json` + the exit code; re-run
+with `--resume` to retry only what failed (a failed partition is never marked
+complete). Output: `data_raw/theta/ticker=<SYM>/date=<D>/{trades,quotes,oi}.parquet`
++ `_manifest.json`. (Prices are per-share option premium — ×100 for notional.
+`side_inferred`: "buy" = customer buy-initiated = dealer sells.)
+
+## 4. Ingest into the engine store (network-free, idempotent)
+
+```bash
+python -m scripts.ingest_theta_options --raw-root data_raw/theta \
+    --store-root data_store --symbols SPY QQQ --parity-bars
+```
+
+This writes, per session: the tape (`DataSource.THETA`, PIT-stamped), the raw
+quotes (`option_quotes` slot), **synthesized chain snapshots** at 5m cadence
+(`DataSource.THETA_DERIVED`: per-contract quote mids, locally BS-inverted IV,
+put-call-parity spot, PRIOR-session OI — see the module docstring for the
+binding PIT rules), and optionally parity underlying bars (never clobbering
+IBKR partitions). A session whose chain has no same-day-expiry rows is refused
+(the engine's option features key on `expiry == session day`).
 
 ## 5. Backtest on real data (paper only, net of costs, OOS)
 
 ```bash
-# Options replay (S1/S2) + parity/IBKR underlying, all behind the one gate:
-python -m intraday backtest --provider theta-store --symbols SPX SPY QQQ \
-    --interval 5m --strategy s1 s2 s3 --start <first> --end <last>
+# Bars (IBKR -> parity -> yahoo fallback) + Theta options from ONE store:
+python -m intraday backtest --provider fused-store --store-root data_store \
+    --symbols SPY QQQ --interval 5m --strategy s1 s3 --start <first> --end <last>
 ```
 
+(`--provider theta-store` cannot serve this store — the underlying bars are
+IBKR/PARITY by policy, and the single-source provider rightly refuses mixed
+provenance. `fused-store` is the replay mode for capture stores.)
+
 Report results **net of costs**, out-of-sample, with an honest per-strategy
-verdict. No parameter is fit on the evaluation window. **Paper only** — no broker
-orders, ever, until a separate, explicit go-live decision.
+verdict. No parameter is fit on the evaluation window. **S2 stays disabled until
+its VRP definition is reworked** (the measured +VRP was ~98% clock artifact).
+**Paper only** — no broker orders, ever, until a separate, explicit go-live
+decision.
 
 ## Guardrails (non-negotiable)
 
 - PAPER ONLY. No broker orders. IBKR/Theta are **data reads only**.
-- Never modify `vendor/swe`.
-- Respect Theta concurrency; small validation pull first; full backfill incremental.
-- Label real vs synthetic; never fabricate edge or data.
+- Never modify `vendor/swe`; the puller writes only under `data_raw/theta/`.
+- Respect Theta concurrency (client caps at 4); probe first; backfill incremental
+  with `--resume`.
+- Label real vs synthetic; never fabricate edge or data. Synthesized chains are
+  `THETA_DERIVED`, not `THETA` — the IV is our inversion, not Theta's.

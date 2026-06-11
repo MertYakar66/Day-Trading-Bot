@@ -1,5 +1,11 @@
 """Scoped Theta OPTIONS pull — PLANNER + safety gate (does NOT pull by default).
 
+.. note:: SUPERSEDED for execution by ``scripts.pull_theta_tape_scoped`` (the
+   bot-side gated puller with historical ``--start/--end`` and per-session
+   expiry resolution; this planner's SWE-puller premise cannot pull historical
+   dates). Kept for its scope/estimate plan and its pinned refuse-to-execute
+   behaviour; delete after the first real backfill validates the new path.
+
 The operator pays ~$80/mo for Theta Options-STANDARD (recurring, cancel-after), so
 the historical pull MUST be tightly scoped to fit one billing month at the tier's
 concurrency. This module builds that scoped work-list and prints the exact SWE

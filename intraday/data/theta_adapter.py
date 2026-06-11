@@ -21,7 +21,7 @@ unless ``allow_connect=True`` is explicitly passed (a deliberate future opt-in o
 a STANDARD-tier laptop with the Terminal up). The class is fully importable and
 unit-testable without ever touching the network. The scoped historical options
 pull is delivered as an operator runbook (``docs/OPERATOR_RUNBOOK.md`` +
-``scripts/pull_theta_options_scoped.py``), not executed here.
+``scripts/pull_theta_tape_scoped.py``), not executed here.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ class ThetaDataProvider(DataProvider):
         # allow_connect=True is a deliberate operator opt-in. The live Theta pull is
         # intentionally NOT wired in-engine: it is performed out-of-band by the
         # scoped operator pull (docs/OPERATOR_RUNBOOK.md +
-        # scripts/pull_theta_options_scoped.py, over SWE's tape puller) and then
+        # scripts/pull_theta_tape_scoped.py, the bot-side gated puller) and then
         # replayed via StoreBackedProvider. We refuse to fabricate connector I/O.
         raise NotImplementedError(
             f"live Theta {what} fetch for {symbol} is not wired in-engine by "

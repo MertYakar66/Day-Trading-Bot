@@ -81,6 +81,11 @@ class DataSource(Enum):
       so Theta NEVER supplies the underlying here.
     - ``PARITY``     — underlying reconstructed from synchronized ATM call/put
       option quotes via put-call parity (deep history where IBKR is shallow).
+    - ``THETA_DERIVED`` — chain snapshots *constructed locally* from Theta-measured
+      inputs (quote mids + daily OI) via Black-Scholes inversion and parity spot.
+      Real (every input is real) but NOT Theta-native: the ``implied_vol`` column
+      is our inversion, not Theta's — labelling it plain ``THETA`` would overstate
+      fidelity, and ``SYNTHETIC`` would understate it.
     - ``FREE_DAILY`` — free end-of-day underlying (yfinance/Stooq) for daily
       regime/tail context only (no intraday).
     - ``FUSED``      — a composite provider resolving underlying across the above
@@ -89,6 +94,7 @@ class DataSource(Enum):
 
     SYNTHETIC = "synthetic"
     THETA = "theta"
+    THETA_DERIVED = "theta_derived"
     IBKR = "ibkr"
     YAHOO = "yahoo"
     PARITY = "parity"
@@ -106,6 +112,7 @@ class DataSource(Enum):
             DataSource.IBKR,
             DataSource.YAHOO,
             DataSource.THETA,
+            DataSource.THETA_DERIVED,
             DataSource.PARITY,
             DataSource.FREE_DAILY,
             DataSource.FUSED,

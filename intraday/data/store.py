@@ -5,12 +5,13 @@ from SWE's ``data.feature_store``, which partitions by ``ticker=`` only and pull
 in a heavy ``data/__init__`` — see ``docs/SWE_API_REFERENCE.md`` and PROGRESS.md
 for the rationale). Layout::
 
-    <root>/bars/        ticker=<SYM>/date=<D>/bars_<interval>.parquet
-    <root>/option_tape/ ticker=<SYM>/date=<D>/trades.parquet
-    <root>/option_chain/ticker=<SYM>/date=<D>/chain.parquet
-    <root>/features/    ticker=<SYM>/date=<D>/<group>.parquet
-    <root>/signals/     date=<D>/signals.parquet
-    <root>/paper_ledger/date=<D>/fills.parquet
+    <root>/bars/         ticker=<SYM>/date=<D>/bars_<interval>.parquet
+    <root>/option_tape/  ticker=<SYM>/date=<D>/trades.parquet
+    <root>/option_chain/ ticker=<SYM>/date=<D>/chain.parquet
+    <root>/option_quotes/ticker=<SYM>/date=<D>/quotes_<interval>.parquet
+    <root>/features/     ticker=<SYM>/date=<D>/<group>.parquet
+    <root>/signals/      date=<D>/signals.parquet
+    <root>/paper_ledger/ date=<D>/fills.parquet
 
 PIT discipline: bar frames are indexed by close ``ts``; tape/chain/feature frames
 carry an ``available_ts`` column. The store persists frames losslessly (tz-aware
@@ -63,6 +64,11 @@ class ParquetStore:
         (part / f"bars_{series.interval}_meta.json").write_text(json.dumps(meta))
         return path
 
+    def has_bars(self, symbol: str, day: date, interval: str = "1m") -> bool:
+        """Whether a bars partition exists (any source) — e.g. the parity-ingest
+        no-clobber check, without callers touching the partition layout."""
+        return (self._partition("bars", symbol, day) / f"bars_{interval}.parquet").exists()
+
     def read_bars(self, symbol: str, day: date, interval: str = "1m") -> BarSeries:
         part = self._partition("bars", symbol, day)
         path = part / f"bars_{interval}.parquet"
@@ -103,7 +109,12 @@ class ParquetStore:
         return OptionTape(symbol.upper(), frame, self._read_source(part / "trades_meta.json"))
 
     # -- option chain --------------------------------------------------- #
-    def write_chain(self, chain: OptionChainSeries, day: date) -> Path:
+    def write_chain(
+        self, chain: OptionChainSeries, day: date, *, synthesis: dict | None = None
+    ) -> Path:
+        """Persist a chain partition; ``synthesis`` (for derived/synthesized
+        chains) is stored as a ``chain_synthesis.json`` sidecar beside the
+        provenance sidecar — sidecar writing stays the store's job."""
         part = self._partition("option_chain", chain.symbol, day)
         part.mkdir(parents=True, exist_ok=True)
         path = part / "chain.parquet"
@@ -111,7 +122,14 @@ class ParquetStore:
         (part / "chain_meta.json").write_text(
             json.dumps({"symbol": chain.symbol, "source": chain.source.value})
         )
+        if synthesis is not None:
+            (part / "chain_synthesis.json").write_text(json.dumps(synthesis, indent=1))
         return path
+
+    def has_chain(self, symbol: str, day: date) -> bool:
+        """Whether a chain partition exists — e.g. the fused-store preflight for
+        options strategies, without callers touching the partition layout."""
+        return (self._partition("option_chain", symbol, day) / "chain.parquet").exists()
 
     def read_chain(self, symbol: str, day: date) -> OptionChainSeries:
         part = self._partition("option_chain", symbol, day)
@@ -120,6 +138,36 @@ class ParquetStore:
             raise FileNotFoundError(f"no chain at {path}")
         frame = pd.read_parquet(path, engine="pyarrow")
         return OptionChainSeries(symbol.upper(), frame, self._read_source(part / "chain_meta.json"))
+
+    # -- option quotes (ingest/reconstruction intermediate, not an engine input) #
+    def write_option_quotes(
+        self, symbol: str, day: date, frame: pd.DataFrame,
+        *, source: DataSource, interval: str = "1m",
+    ) -> Path:
+        """Persist per-contract quote bars (bid/ask/mid at ``interval`` cadence).
+
+        Quotes are the raw material for chain synthesis and parity spot — they are
+        not consumed by the engine directly, so there is no PIT container class;
+        provenance still round-trips through a sidecar like every other slot.
+        """
+        part = self._partition("option_quotes", symbol, day)
+        part.mkdir(parents=True, exist_ok=True)
+        path = part / f"quotes_{interval}.parquet"
+        frame.to_parquet(path, engine="pyarrow", index=False)
+        (part / f"quotes_{interval}_meta.json").write_text(
+            json.dumps({"symbol": symbol.upper(), "source": source.value, "interval": interval})
+        )
+        return path
+
+    def read_option_quotes(
+        self, symbol: str, day: date, interval: str = "1m"
+    ) -> tuple[pd.DataFrame, DataSource]:
+        part = self._partition("option_quotes", symbol, day)
+        path = part / f"quotes_{interval}.parquet"
+        if not path.exists():
+            raise FileNotFoundError(f"no option quotes at {path}")
+        frame = pd.read_parquet(path, engine="pyarrow")
+        return frame, self._read_source(part / f"quotes_{interval}_meta.json")
 
     @staticmethod
     def _read_source(meta_path: Path) -> DataSource:

@@ -58,9 +58,19 @@ class FusedDataProvider(DataProvider):
         self.options = options
 
     def trading_days(self, start: date, end: date) -> list[date]:
-        # Delegate to the primary (first) underlying provider's calendar; order the
-        # providers so the first carries the authoritative session calendar.
-        return self.underlying[0].trading_days(start, end)
+        """Sorted UNION of the underlying providers' calendars.
+
+        ``get_bars`` falls back through the providers in order, so a session is
+        runnable if ANY of them can serve it — delegating to only the first
+        would hide every deep-history session a fallback (e.g. parity) carries
+        behind a shallow primary (e.g. IBKR). Note each store provider's own
+        calendar already intersects across its symbols, so a day whose symbols
+        split across two sources is conservatively excluded.
+        """
+        days: set[date] = set()
+        for prov in self.underlying:
+            days.update(prov.trading_days(start, end))
+        return sorted(days)
 
     def get_bars(self, symbol: str, day: date, interval: str = "1m") -> BarSeries:
         errors: list[str] = []
