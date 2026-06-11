@@ -17,6 +17,7 @@ import argparse
 import os
 import sys
 from datetime import date
+from pathlib import Path
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _p in (_ROOT, os.path.join(_ROOT, "vendor", "swe")):
@@ -27,7 +28,8 @@ from intraday.config import EngineConfig  # noqa: E402
 from intraday.contracts import DataSource  # noqa: E402
 from intraday.data.store import ParquetStore  # noqa: E402
 from intraday.data.store_provider import StoreBackedProvider  # noqa: E402
-from intraday.live import LivePoller  # noqa: E402
+from intraday.execution.paper_ledger import PaperLedger  # noqa: E402
+from intraday.live import LiveDecision, LivePoller  # noqa: E402
 from intraday.signals.s3_vwap_orb import S3VwapOrb  # noqa: E402
 from intraday.signals.s4_orb_breakout import S4OpeningRangeBreakout  # noqa: E402
 from intraday.signals.s5_vwap_momentum import S5VwapMomentum  # noqa: E402
@@ -46,6 +48,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--strategies", nargs="+", default=["s3", "s4", "s5"])
     p.add_argument("--start", type=date.fromisoformat, default=date(2026, 1, 1))
     p.add_argument("--end", type=date.fromisoformat, default=date(2026, 12, 31))
+    p.add_argument(
+        "--persist-root", type=Path, default=None,
+        help="persist the gated decisions as signal records (backtest-identical "
+             "schema) under <root>/signals/date=<session>/. Re-running the same "
+             "session overwrites that day's poll record, so use a dedicated root "
+             "(e.g. data_store/paper_poll), not the backtest --store root.",
+    )
     args = p.parse_args(argv)
 
     cfg = EngineConfig.default()
@@ -69,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     print("-" * 72)
     print(f" {'symbol':6} {'strat':18} {'verdict':8} {'side':5} {'size':>5} {'ev_net$':>9} {'reason'}")
     print("-" * 72)
-    any_dec = False
+    all_decisions: list[LiveDecision] = []
     for sym in args.symbols:
         try:
             decisions = poller.poll(sym, day, as_of)
@@ -77,13 +86,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f" {sym:6} (no data: {type(e).__name__})")
             continue
         for d in decisions:
-            any_dec = True
+            all_decisions.append(d)
             flag = "*TRADE*" if d.tradeable else ""
             print(f" {sym:6} {d.strategy_id:18} {d.verdict:8} {d.side:5} {d.size:>5} "
                   f"{d.ev_net:>9.2f} {d.reason} {flag}")
-    if not any_dec:
+    if not all_decisions:
         print(" (no strategy produced a signal at this poll time)")
     print("=" * 72)
+    if args.persist_root is not None and all_decisions:
+        ledger = PaperLedger(cfg.risk.paper_nav)
+        for d in all_decisions:
+            ledger.log_signal(d.to_signal_row())
+        ledger.persist(ParquetStore(args.persist_root))
+        print(f" persisted {len(all_decisions)} decision(s) -> "
+              f"{args.persist_root}/signals/date={day}/signals.parquet")
     print(" Paper-only: decisions are advisory; nothing was sent to any broker.")
     return 0
 

@@ -34,6 +34,14 @@ headline is unchanged**). Tests 487 → 529.
   session is never mislabelled solid `[REAL DATA: parity]`.
 
 ### Added
+- **Persisted paper polls + a daily prospective routine**: `live_paper_poll`
+  gained `--persist-root`, writing the gated decisions in the
+  **backtest-identical signal schema** (`LiveDecision.to_signal_row`, record
+  parity per DESIGN §8) so paper polls and backtest replays are directly
+  diffable; `LiveDecision` now carries `ev_gross` for exact parity. New
+  [`docs/DAILY_ROUTINE.md`](docs/DAILY_ROUTINE.md) documents the once-a-day,
+  no-Theta collection loop (fetch → ingest → persisted poll → single-day
+  `backtest --store`).
 - Eval honesty disclosures: an i.i.d. serial-dependence caveat (the stationary
   bootstrap CI is named as the short-range-robust counterweight) and a small-`n_trials`
   caveat on a green EDGE verdict.

@@ -31,11 +31,24 @@ class LiveDecision:
     verdict: str            # PROCEED / REVIEW / SKIP / BLOCKED
     side: str
     size: int
+    ev_gross: float
     ev_net: float
     cost: float
     reason: str
     tradeable: bool         # PROCEED and a positive size
     trail: tuple[str, ...] = field(default_factory=tuple)
+
+    def to_signal_row(self) -> dict:
+        """The exact signal-record shape the backtest writes (record parity,
+        DESIGN §8) — so a persisted poll and a backtest are directly diffable."""
+        return {
+            "as_of": pd.Timestamp(self.as_of).isoformat(),
+            "symbol": self.symbol, "strategy_id": self.strategy_id,
+            "side": self.side, "size": self.size,
+            "verdict": self.verdict, "reason": self.reason,
+            "ev_gross": self.ev_gross, "ev_net": self.ev_net,
+            "cost": self.cost, "trail": ";".join(self.trail),
+        }
 
 
 class LivePoller:
@@ -84,6 +97,7 @@ class LivePoller:
                 verdict=gres.verdict.name,
                 side=prop.side.value,
                 size=sizing.size,
+                ev_gross=gres.ev_gross,
                 ev_net=gres.ev_net,
                 cost=gres.cost.total,
                 reason=gres.reason,
