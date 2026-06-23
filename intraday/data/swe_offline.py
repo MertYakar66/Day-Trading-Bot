@@ -374,6 +374,9 @@ def load_index_chain(
 
     - **One expiry only** (avoid the SPX+SPXW / multi-expiry GEX-blending defect).
       Defaults to the *nearest* expiry in the snapshot; pass ``expiry`` to pick one.
+      (Every currently-captured snapshot holds a single expiry, so this is a
+      defensive guard against future multi-expiry captures rather than something
+      the present data exercises.)
     - ``implied_vol`` kept only where ``iv > 0`` (deep wings quote iv==0); rows with
       non-positive OI optionally dropped via ``min_oi``.
     - ``spot`` taken from the real ``underlying_price``.
@@ -389,10 +392,11 @@ def load_index_chain(
         )
     raw = pd.read_parquet(snaps[snapshot_date])
     raw = raw.copy()
-    # The captured index chains are heterogeneous: most (SPX/VIX/RUT/SPXW/XSP/DJX)
-    # are greek chains with iv + OI + underlying_price; a few (e.g. NDX) are raw
-    # quote snapshots with no iv/OI and are NOT usable for GEX. Validate up front
-    # and refuse with a clear message rather than dying on a downstream KeyError.
+    # The captured index chains are heterogeneous: most are greek chains with iv +
+    # OI + underlying_price, but some snapshots are raw quote captures with no
+    # iv/OI (e.g. NDX_20260423 — though NDX's 0524/0601 snapshots ARE full greek
+    # chains) and are NOT usable for GEX. Validate per-snapshot up front and refuse
+    # with a clear message rather than dying on a downstream KeyError.
     required = ("expiration", "strike", "right", "iv", "open_interest", "underlying_price")
     missing = [c for c in required if c not in raw.columns]
     if missing:
