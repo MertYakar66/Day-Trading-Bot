@@ -25,7 +25,8 @@ data to see whether it produces realistic and reliable outputs.
 | **Correctness** | Merged the reviewed audit-backlog fixes: metrics inception (Sharpe/DD were wrong), GEX multi-expiry blending (~3000× error on real chains), CLOSE-fill double-count, honest 20-session validity floor. |
 | **New capability** | `VolRegimeReviewer` (opt-in, downgrade-only) stands aside in stress vol regimes (backwardation / extreme vvix). |
 | **Validation** | Real GEX reconciles to an independent BSM recompute to **2.3e-15**; real single-name VRP **replicates** the −0.46 vol-pt finding; **33/33** numerical/PIT stress cases pass. |
-| **Tests** | +82 hermetic tests (network-free, no dependence on the 11 GB data). Suite **626 passing**, ruff + mypy clean. |
+| **Tests** | +90 hermetic tests (network-free, no dependence on the 11 GB data). Suite **634 passing**, ruff + mypy clean. |
+| **Core-thesis test** | Built a real multi-year GEX reconstructor from the deep history (BS IV inversion) and tested the gamma-spine premise — **it holds and replicates**: the dealer-gamma regime predicts next-day realized moves on SPY *and* QQQ (~+27 bps, p<0.001 each) even after controlling for vol clustering. See `docs/GAMMA_THESIS_FINDING.md`. |
 
 ---
 
@@ -142,11 +143,15 @@ bug masked. The wiring reinforced the honest finding rather than undermining it.
   OFI, no real intraday ATM-IV path, and no way to replace the fabricated
   `win_prob` with a measured one. S1/S2 cannot be backtested on real options across
   many sessions.
-- **The deep asset to build next:** `theta/index_reference/option_history`
-  (SPX/SPY/QQQ, 2016→2026, OHLC+NBBO+OI) supports a real multi-year GEX/VRP series,
-  but needs a Black-Scholes IV-inversion + parity-spot reconstruction layer (the
-  `chain_synthesis.py` pattern) before it is engine-ready. Kept out of the hot path
-  here to avoid shipping unvetted look-ahead/IV bugs.
+- **The deep asset — now built and exercised:** `theta/index_reference/option_history`
+  (SPY/QQQ, 2016→2026, OHLC+NBBO+OI) is now reconstructed into real multi-year GEX
+  via `intraday/data/index_chain_history.py` (BS IV-inversion + parity spot, kept as
+  a separate, round-trip-tested module off the hot path). This powered the
+  core-thesis test (`docs/GAMMA_THESIS_FINDING.md`). **Still genuinely missing:**
+  real intraday option *tape* (OFI) for the spine — without it S1 still stands
+  aside, so the gamma signal cannot yet be *traded* in-engine, only measured. The
+  signal being real but unmonetized is the key open problem (execution/cost, not
+  thesis).
 
 ---
 
