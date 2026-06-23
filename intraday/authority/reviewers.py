@@ -6,9 +6,11 @@ upgrade one. This is enforced structurally: every reviewer returns its verdict v
 and proposed verdicts. The "reviewers only downgrade" property test exhausts all
 (current, proposed) pairs to prove no reviewer can ever raise a verdict.
 
-Four reviewers (DESIGN.md §6):
+Reviewers (DESIGN.md §6):
 - :class:`EventLockoutReviewer`  — earnings/FOMC/CPI windows (SWE ``event_gate``).
 - :class:`RegimeFilterReviewer`  — disable a strategy in a hostile gamma regime.
+- :class:`VolRegimeReviewer`      — stand aside in a hostile daily vol regime
+  (term-structure backwardation / extreme vol-of-vol); opt-in, no-op by default.
 - :class:`LiquidityGateReviewer` — skip when the quoted spread is too wide.
 - :class:`DailyKillSwitchReviewer` — block all signals once the daily loss budget
   is hit (SWE ``risk_manager`` ``daily_loss_limit_pct``).
@@ -108,6 +110,60 @@ class RegimeFilterReviewer:
         return result
 
 
+class VolRegimeReviewer:
+    """Downgrade signals in a hostile *daily* vol regime (opt-in, downgrade-only).
+
+    Uses the prior-session vol context now stamped onto the feature row
+    (:class:`intraday.data.daily_context.DailyContextProvider`): the VIX term-
+    structure slope ``vix/vix3m`` and vol-of-vol ``vvix``. Mean-reversion and
+    premium-selling setups (S1 fades, S2 short condors) tend to break exactly when
+    the front of the curve **inverts** (``term_slope > 1`` ⇒ backwardation /
+    stress) or vol-of-vol spikes; standing aside there is a conservative,
+    regime-aware risk control.
+
+    PIT-safe by construction — the regime read is a strictly-prior-session daily
+    close. Absent a read (no daily-context provider), it is a **no-op**: like the
+    other reviewers it never fires on absent evidence. Both thresholds default to
+    ``None`` (disabled), so the default reviewer stack is unchanged unless the
+    operator opts in.
+    """
+
+    name = "vol_regime"
+
+    def __init__(
+        self,
+        *,
+        max_term_slope: float | None = None,
+        max_vvix: float | None = None,
+        cap: Verdict = Verdict.SKIP,
+    ) -> None:
+        self.max_term_slope = max_term_slope
+        self.max_vvix = max_vvix
+        self.cap = cap
+
+    def review(self, result: GateResult, ctx: ReviewContext) -> GateResult:
+        fr = ctx.feature_row
+        if fr is None:
+            return result
+        if (
+            self.max_term_slope is not None
+            and fr.vix_term_slope is not None
+            and fr.vix_term_slope > self.max_term_slope
+        ):
+            return result.with_downgrade(
+                self.cap, f"{self.name}:term_slope {fr.vix_term_slope:.2f}>{self.max_term_slope:.2f}"
+            )
+        if (
+            self.max_vvix is not None
+            and fr.vvix is not None
+            and fr.vvix > self.max_vvix
+        ):
+            return result.with_downgrade(
+                self.cap, f"{self.name}:vvix {fr.vvix:.0f}>{self.max_vvix:.0f}"
+            )
+        return result
+
+
 class LiquidityGateReviewer:
     """Skip when the contemplated trade's quoted spread is too wide (DESIGN §6)."""
 
@@ -177,14 +233,26 @@ def default_reviewers(
     *,
     years: list[int] | None = None,
     regime_hostile: dict[GammaRegime, Verdict] | None = None,
+    vol_regime_max_term_slope: float | None = None,
+    vol_regime_max_vvix: float | None = None,
 ) -> ReviewerPipeline:
     """The Phase-0 reviewer stack. ``regime_hostile`` defaults to empty (the S3
-    control is not regime-gated); event lockout uses the given years' calendar."""
+    control is not regime-gated); event lockout uses the given years' calendar.
+
+    ``vol_regime_max_term_slope`` / ``vol_regime_max_vvix`` opt into the daily
+    vol-regime stand-aside (both ``None`` ⇒ the reviewer is a no-op and the stack
+    is unchanged). They only bite when a :class:`DailyContextProvider` has stamped
+    the prior-session vol context onto the feature rows.
+    """
     years = years or [2025, 2026, 2027]
     return ReviewerPipeline(
         [
             EventLockoutReviewer(build_default_event_gate(years)),
             RegimeFilterReviewer(regime_hostile or {}),
+            VolRegimeReviewer(
+                max_term_slope=vol_regime_max_term_slope,
+                max_vvix=vol_regime_max_vvix,
+            ),
             LiquidityGateReviewer(),
             DailyKillSwitchReviewer(config.risk.daily_loss_limit_pct),
         ]
