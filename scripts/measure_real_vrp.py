@@ -41,13 +41,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "vendor" / "swe"))
 sys.path.insert(0, str(_REPO_ROOT))
 
-import json
-from datetime import datetime, timezone
+import json  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
 
-import numpy as np
-import pandas as pd
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
-from intraday.data.swe_offline import (
+from intraday.data.swe_offline import (  # noqa: E402
     SweDataUnavailable,
     load_iv_history,
     swe_root,
@@ -295,7 +295,7 @@ def main() -> int:
     }
 
     payload = {
-        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "generated_utc": datetime.now(UTC).isoformat(),
         "swe_root": str(swe_root()),
         "vrp_definition": "VRP_calendar = atm_iv - rv_30d (both annualized decimals)",
         "universe_requested": CANDIDATE_UNIVERSE,

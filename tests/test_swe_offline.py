@@ -10,7 +10,6 @@ read stale cached objects from a previous test's fake tree.
 
 from __future__ import annotations
 
-import importlib
 from datetime import date
 from pathlib import Path
 
@@ -24,11 +23,11 @@ from intraday.data.swe_offline import (
     RiskFreeCurve,
     SweDataUnavailable,
     VolRegimePanel,
+    list_index_chain_snapshots,
     load_index_chain,
     load_iv_history,
     load_risk_free_curve,
     load_vol_regime,
-    list_index_chain_snapshots,
 )
 
 # --------------------------------------------------------------------------- #
