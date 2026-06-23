@@ -143,6 +143,7 @@ def reconstruct_chain(
     q: float | None = None,
     root: str | None = None,
     min_strikes: int = 8,
+    strike_window_pct: float | None = None,
     latency: pd.Timedelta = pd.Timedelta(seconds=1),
     _partition: pd.DataFrame | None = None,
 ) -> tuple[OptionChainSeries, ReconStats] | None:
@@ -190,6 +191,16 @@ def reconstruct_chain(
     spot, n_pairs = _parity_spot(q_, r=r, q=q, T=T)
     if spot is None:
         return None
+
+    # Optionally invert only the gamma-relevant strikes near spot. Deep wings carry
+    # ~zero gamma, so restricting the (expensive) IV inversion to a ±window of spot
+    # is a large speedup for a multi-year sweep with negligible effect on GEX. The
+    # OI of dropped wings is excluded too — acceptable since their gamma weight ~0.
+    if strike_window_pct is not None:
+        lo, hi = spot * (1 - strike_window_pct), spot * (1 + strike_window_pct)
+        q_ = q_.loc[(q_["strike"] >= lo) & (q_["strike"] <= hi)]
+        if q_.empty:
+            return None
 
     ivs: list[float] = []
     keep_idx: list[int] = []
