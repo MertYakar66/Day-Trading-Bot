@@ -231,6 +231,9 @@ class IntradayBacktester:
                     per_unit = pos.meta["win_per_unit"] if inside else -pos.meta["loss_per_unit"]
                     gross = per_unit * pos.size
                     costs = pos.entry_cost
+                    # The whole round-trip cost was charged on the OPEN leg;
+                    # settlement books no exit trade, so its leg cost is zero.
+                    exit_leg_cost = 0.0
                     fill_ts = index[i]
                     reason = "settle_inside" if inside else "settle_outside"
                     fill_price = close_now
@@ -242,6 +245,7 @@ class IntradayBacktester:
                     fill_price, exit_cost, fill_ts = self._exit_fill(pos, d, i, index, n)
                     gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
                     costs = pos.entry_cost + exit_cost
+                    exit_leg_cost = exit_cost
 
                 net = gross - costs
                 day_realized += net
@@ -255,9 +259,12 @@ class IntradayBacktester:
                         gross_pnl=gross, costs=costs, net_pnl=net, exit_reason=reason,
                     )
                 )
+                # Fill.cost is the cost attributed to THIS leg (the OPEN fill
+                # already carries the entry leg), so the persisted fills ledger
+                # sums to the trade's round-trip cost — never double-counts it.
                 fills.append(
                     Fill(fill_ts, sym, _close_side(pos.side), pos.size, fill_price,
-                         "CLOSE", costs, reason)
+                         "CLOSE", exit_leg_cost, reason)
                 )
                 del positions[sym]
                 if daily_budget > 0 and day_realized <= -daily_budget:
@@ -292,6 +299,7 @@ class IntradayBacktester:
                 per_unit = pos.meta["win_per_unit"] if inside else -pos.meta["loss_per_unit"]
                 gross = per_unit * pos.size
                 costs = pos.entry_cost
+                exit_leg_cost = 0.0  # round trip charged on the OPEN leg
                 reason = "settle_inside" if inside else "settle_outside"
             else:
                 _, exit_cost = conservative_fill(
@@ -301,6 +309,7 @@ class IntradayBacktester:
                 )
                 gross = pos.side.sign * (fill_price - pos.entry_price) * pos.size * pos.multiplier
                 costs = pos.entry_cost + exit_cost
+                exit_leg_cost = exit_cost
                 reason = "eod_safety"
             net = gross - costs
             day_realized += net
@@ -311,6 +320,12 @@ class IntradayBacktester:
                       exit_ts=index[n - 1], entry_price=pos.entry_price,
                       exit_price=fill_price, gross_pnl=gross, costs=costs,
                       net_pnl=net, exit_reason=reason)
+            )
+            # Every OPEN fill needs its CLOSE counterpart in the persisted ledger,
+            # even on this (normally unreachable) safety path.
+            fills.append(
+                Fill(index[n - 1], sym, _close_side(pos.side), pos.size, fill_price,
+                     "CLOSE", exit_leg_cost, reason)
             )
             del positions[sym]
 
@@ -351,7 +366,22 @@ class IntradayBacktester:
                 chain, at, expiry=day, ticker=sym,
                 risk_free_rate=self.config.gate.risk_free_rate,
             )
-            out.append((at, gs, atm_iv_at(chain, at)))
+            out.append((at, gs, atm_iv_at(chain, at, expiry=day)))
+        if out and not chain.frame.empty and all(
+            gs is None and iv is None for _, gs, iv in out
+        ):
+            # The capture has snapshots but none carries the requested (0DTE)
+            # expiry, so every option feature will be empty all session. Say so
+            # loudly: a tenor-mismatched backfill must not masquerade as a quiet
+            # no-trade day.
+            expiries = sorted(
+                {d.isoformat() for d in pd.to_datetime(chain.frame["expiration"]).dt.date}
+            )
+            logger.warning(
+                "option chain for %s on %s has no %s rows (expiries present: %s); "
+                "GEX/ATM-IV/VRP features will be empty for the session",
+                sym, day, day, ", ".join(expiries),
+            )
         return out
 
     @staticmethod

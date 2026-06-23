@@ -85,6 +85,7 @@ padding:4px 0;font-size:12.5px}
 .badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700}
 .badge--edge{background:rgba(63,185,80,.15);color:var(--pos);border:1px solid var(--pos)}
 .badge--noedge{background:rgba(248,81,73,.12);color:var(--neg);border:1px solid var(--neg)}
+.badge--nodata{background:rgba(110,118,129,.12);color:var(--mut);border:1px solid var(--mut)}
 .badge--synthetic{background:rgba(248,81,73,.10);color:#ffb3ae;border:1px solid var(--neg)}
 .badge--real{background:rgba(63,185,80,.10);color:#9be8a8;border:1px solid var(--pos)}
 /* index page */

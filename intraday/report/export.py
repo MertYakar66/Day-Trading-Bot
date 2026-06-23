@@ -80,7 +80,7 @@ def summary_dict(
             "n_trials": ev.n_trials,
             "significant": bool(ev.significant),
         },
-        "verdict": edge_verdict(ev),  # EDGE / NO_EDGE / INSUFFICIENT_DATA (n_days < 2)
+        "verdict": edge_verdict(ev),  # EDGE / NO_EDGE / INSUFFICIENT_DATA (n_days < INSUFFICIENT_DATA_MIN_DAYS)
     }
 
 
