@@ -114,7 +114,9 @@ class S2ZeroDteVrp:
 
         from engine.option_pricer import black_scholes_price  # lazy (SWE)
 
-        r = config.gate.risk_free_rate
+        # Prefer the real prior-session risk-free rate when a daily-context provider
+        # supplied one (fr.risk_free_rate); otherwise the config scalar.
+        r = fr.risk_free_rate if fr.risk_free_rate is not None else config.gate.risk_free_rate
         iv = fr.atm_iv
         sc = black_scholes_price(spot, spot + short_width, t, r, iv, "call")
         lc = black_scholes_price(spot, spot + short_width + wing_width, t, r, iv, "call")

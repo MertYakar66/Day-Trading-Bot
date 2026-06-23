@@ -39,6 +39,7 @@ from ..contracts import (
     Side,
     Trade,
 )
+from ..data.daily_context import DailyContext, DailyContextProvider
 from ..data.provider import DataProvider
 from ..data.quality import assert_finite_bars, assert_no_feed_gap
 from ..features.base import FeatureRow
@@ -85,6 +86,7 @@ class IntradayBacktester:
         *,
         reviewers: ReviewerPipeline | None = None,
         record_signals: bool = True,
+        daily_context: DailyContextProvider | None = None,
     ) -> None:
         self.config = config
         self.provider = provider
@@ -93,6 +95,10 @@ class IntradayBacktester:
         self.reviewers = reviewers or default_reviewers(config)
         self.pipeline = FeaturePipeline(config)
         self.record_signals = record_signals
+        # Optional prior-session daily real-data context (real risk-free rate +
+        # vol regime). Purely additive: when None, every context field is None and
+        # the engine uses the config's scalar risk-free rate, exactly as before.
+        self.daily_context = daily_context
         # Only load/compute option features (chain → GEX/walls/flip, tape → OFI)
         # and intraday RV/VRP when a strategy actually consumes them — keeps the
         # S3-only path fast and unchanged.
@@ -151,6 +157,16 @@ class IntradayBacktester:
         signals: list[dict],
     ) -> float:
         cfg = self.config
+        # Resolve the prior-session daily context once for the whole day (PIT: it
+        # is built only from data dated strictly before ``day``). The real
+        # risk-free rate, when available, is what the GEX analyzer and S2 option
+        # pricing use; otherwise the config scalar stands in.
+        ctx = self.daily_context.context_for(day) if self.daily_context else None
+        r_day = (
+            ctx.risk_free_rate
+            if ctx is not None and ctx.risk_free_rate is not None
+            else cfg.gate.risk_free_rate
+        )
         # Load + precompute per symbol.
         loaded: dict[str, dict] = {}
         for sym in symbols:
@@ -178,7 +194,7 @@ class IntradayBacktester:
             }
             if self._needs_options:
                 loaded[sym]["tape"] = self.provider.get_option_tape(sym, day)
-                loaded[sym]["snaps"] = self._precompute_snapshots(sym, day)
+                loaded[sym]["snaps"] = self._precompute_snapshots(sym, day, r_day)
 
         ref = loaded[symbols[0]]
         index = ref["frame"].index
@@ -279,7 +295,7 @@ class IntradayBacktester:
                 if len(positions) >= cfg.risk.max_concurrent_positions:
                     break
                 d = loaded[sym]
-                fr = self._feature_row(sym, as_of, d, i)
+                fr = self._feature_row(sym, as_of, d, i, ctx)
                 opened = self._try_enter(
                     sym, fr, d, i, index, nav0, day_realized, session_killed,
                     positions, fills, signals, flatten_at,
@@ -343,7 +359,9 @@ class IntradayBacktester:
         pos = index.searchsorted(we, side="left")
         return int(pos)
 
-    def _precompute_snapshots(self, sym: str, day: date) -> list[tuple]:
+    def _precompute_snapshots(
+        self, sym: str, day: date, risk_free_rate: float | None = None
+    ) -> list[tuple]:
         """Per-snapshot (available_ts, GammaStructure|None, atm_iv|None).
 
         The dealer GEX/flip/walls solve is the expensive part (SWE re-prices the
@@ -362,9 +380,10 @@ class IntradayBacktester:
             if last_at is not None and (at - last_at) < step:
                 continue
             last_at = at
+            r = risk_free_rate if risk_free_rate is not None else self.config.gate.risk_free_rate
             gs = gamma_structure_at(
                 chain, at, expiry=day, ticker=sym,
-                risk_free_rate=self.config.gate.risk_free_rate,
+                risk_free_rate=r,
             )
             out.append((at, gs, atm_iv_at(chain, at, expiry=day)))
         if out and not chain.frame.empty and all(
@@ -395,7 +414,10 @@ class IntradayBacktester:
                 break
         return chosen
 
-    def _feature_row(self, sym: str, as_of: pd.Timestamp, d: dict, i: int) -> FeatureRow:
+    def _feature_row(
+        self, sym: str, as_of: pd.Timestamp, d: dict, i: int,
+        ctx: DailyContext | None = None,
+    ) -> FeatureRow:
         dev = d["dev"][i]
         sigma = d["sigma"][i]
         orb_known = i >= d["or_known_i"]
@@ -448,6 +470,12 @@ class IntradayBacktester:
             flip_distance_pct=flip_dist,
             nearest_call_wall=ncw,
             nearest_put_wall=npw,
+            risk_free_rate=(ctx.risk_free_rate if ctx is not None else None),
+            vix=(ctx.vix if ctx is not None else None),
+            vix_term_slope=(ctx.vix_term_slope if ctx is not None else None),
+            vix_front_slope=(ctx.vix_front_slope if ctx is not None else None),
+            vvix=(ctx.vvix if ctx is not None else None),
+            skew=(ctx.skew if ctx is not None else None),
             meta={},
         )
 
