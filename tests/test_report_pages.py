@@ -109,8 +109,9 @@ def test_summary_is_json_serialisable_and_faithful(runs):
     assert s["schema"] == "intraday.report.summary/1"
     assert s["is_real"] is False and s["data_source"] == "synthetic"
     assert s["eval"]["n_trials"] == 3
-    assert s["verdict"] in ("EDGE", "NO_EDGE")
-    assert s["verdict"] == ("EDGE" if s["eval"]["significant"] else "NO_EDGE")
+    # A 5-session run sits under the INSUFFICIENT_DATA_MIN_DAYS verdict floor, so
+    # the export must abstain rather than print a definitive verdict.
+    assert s["verdict"] == "INSUFFICIENT_DATA"
     assert s["metrics"]["total_trades"] == sum(1 for _ in runs[0][1].trades)
     assert "nan" not in blob.lower() and "infinity" not in blob.lower()
 

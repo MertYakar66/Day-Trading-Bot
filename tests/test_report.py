@@ -81,11 +81,26 @@ def test_dashboard_is_deterministic(bt_result):
     assert a == b
 
 
-def test_synthetic_banner_and_no_edge_verdict(bt_result):
+def test_synthetic_banner_and_insufficient_verdict(bt_result):
     html = build_dashboard(bt_result, generated_at=GEN)
     assert "SYNTHETIC DATA" in html
     assert "banner--synthetic" in html
-    # Synthetic random-walk minus costs is never a real edge.
+    # A 5-session run sits under the INSUFFICIENT_DATA_MIN_DAYS verdict floor: the
+    # dashboard must abstain, not print a definitive verdict.
+    assert "INSUFFICIENT DATA" in html
+    assert "verdict--nodata" in html
+
+
+def test_no_edge_band_renders_with_sufficient_days(bt_result):
+    """With enough days and a non-significant eval, the NO-EDGE band renders."""
+    metrics = build_report(bt_result)
+    ev = StrategyEval(
+        n_days=150, total_pnl=-1_000.0, mean_daily_pnl=-6.7, win_days=70,
+        t_stat=-0.5, p_value=0.62, sharpe_ann=-0.4, sharpe_ann_ci_lo=-1.2,
+        sharpe_ann_ci_hi=0.4, skew=0.0, kurtosis=3.0, psr_vs_zero=0.3,
+        n_trials=3, deflated_sharpe=0.1, significant=False,
+    )
+    html = render_dashboard(bt_result, metrics, ev, generated_at=GEN)
     assert "NO DEMONSTRATED EDGE" in html
     assert "verdict--noedge" in html
 

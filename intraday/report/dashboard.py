@@ -98,10 +98,14 @@ def _esc(s) -> str:
 # --------------------------------------------------------------------------- #
 # Section builders
 # --------------------------------------------------------------------------- #
-def _drawdown_curve(equity: Sequence[float]) -> list[float]:
-    """Underwater curve: fractional drawdown from the running peak (<= 0)."""
+def _drawdown_curve(equity: Sequence[float], *, initial: float | None = None) -> list[float]:
+    """Underwater curve: fractional drawdown from the running peak (<= 0).
+
+    ``initial`` seeds the running peak at inception capital so a loss on day 1
+    is not censored (the curve's first point is day 1's CLOSE, not day 0).
+    """
     out: list[float] = []
-    peak = float("-inf")
+    peak = float(initial) if initial is not None else float("-inf")
     for v in equity:
         peak = max(peak, v)
         out.append((v / peak - 1.0) if peak > 0 else 0.0)
@@ -191,8 +195,8 @@ def _kpi_grid(m: MetricsReport, ev: StrategyEval) -> str:
              cls=_signed_cls(m.gross_pnl)),
         _kpi("Total costs", _money(m.total_costs),
              f"{m.cost_bps_of_notional:.1f} bps of notional", cls="neg"),
-        _kpi("Sharpe (net, ann.)", f"{m.sharpe_ratio:.2f}",
-             f"95% CI [{ev.sharpe_ann_ci_lo:.2f}, {ev.sharpe_ann_ci_hi:.2f}]",
+        _kpi("Sharpe (net, ann.)", _fnum(m.sharpe_ratio),
+             f"95% CI [{_fnum(ev.sharpe_ann_ci_lo)}, {_fnum(ev.sharpe_ann_ci_hi)}]",
              cls=_signed_cls(m.sharpe_ratio)),
         _kpi("Sortino (net, ann.)", _fnum(m.sortino_ratio), "downside volatility only",
              cls=_signed_cls(m.sortino_ratio)),
@@ -527,7 +531,7 @@ def render_dashboard(
     daily = daily_pnl_from_result(result)
     daily_vals = [float(v) for v in daily.to_numpy()] if len(daily) else []
     daily_dates = [str(d)[:10] for d in daily.index] if len(daily) else []
-    dd = _drawdown_curve(equity)
+    dd = _drawdown_curve(equity, initial=result.initial_capital)
 
     rm = run_meta or {}
     meta_bits = [

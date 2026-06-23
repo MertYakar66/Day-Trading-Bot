@@ -105,7 +105,7 @@ class FeaturePipeline:
                 v = vrp_at(
                     chain, pit_bars, as_of, interval,
                     window=self.rv_window, estimator=self.rv_estimator,
-                    session=self.config.session,
+                    session=self.config.session, expiry=day,
                 )
                 atm_iv, rv, vrp_val = v.atm_iv, v.rv, v.vrp
             except ImportError:  # pragma: no cover - SWE always present in runs

@@ -59,6 +59,17 @@ def _build_provider(args, cfg: EngineConfig, symbols: list[str]):
     )
 
 
+def _build_daily_context(args):
+    """Optional prior-session real-data context (risk-free curve + vol regime) from
+    the offline SWE bridge. ``None`` unless ``--daily-context`` is passed; the load
+    is network-free (reads captured files only)."""
+    if not getattr(args, "daily_context", False):
+        return None
+    from .data.daily_context import DailyContextProvider
+
+    return DailyContextProvider.from_swe(root=getattr(args, "swe_root", None))
+
+
 def _build_strategies(names: list[str], edge: float, entry_z: float, stop_k: float):
     """Build strategies from the shared registry (the single source of truth)."""
     try:
@@ -137,7 +148,7 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
     provider = _build_provider(args, cfg, symbols)
     strategies = _build_strategies(args.strategy, args.edge, args.entry_z, args.stop_k)
-    bt = IntradayBacktester(cfg, provider, strategies)
+    bt = IntradayBacktester(cfg, provider, strategies, daily_context=_build_daily_context(args))
 
     logger.info(
         "backtest | source=%s symbols=%s %s..%s interval=%s nav=$%.0f",
@@ -194,7 +205,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     symbols = args.symbols or list(DEFAULT_SYMBOLS)
     provider = _build_provider(args, cfg, symbols)
     strategies = _build_strategies(args.strategy, args.edge, args.entry_z, args.stop_k)
-    bt = IntradayBacktester(cfg, provider, strategies)
+    bt = IntradayBacktester(cfg, provider, strategies, daily_context=_build_daily_context(args))
 
     logger.info(
         "report | source=%s symbols=%s %s..%s interval=%s",
@@ -246,7 +257,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
     runs: list[tuple[str, BacktestResult]] = []
     for name in args.strategy:
         strat = _build_strategies([name], args.edge, args.entry_z, args.stop_k)
-        bt = IntradayBacktester(cfg, provider, strat)
+        bt = IntradayBacktester(cfg, provider, strat, daily_context=_build_daily_context(args))
         logger.info("compare | %s source=%s %s..%s interval=%s",
                     name, provider.source.value, args.start, args.end, args.interval)
         runs.append((name, bt.run(symbols, args.start, args.end, args.interval)))
@@ -431,6 +442,13 @@ def _add_run_args(sp: argparse.ArgumentParser) -> None:
              "s3/s4/s5 are underlying-only. Run 'intraday strategies' for the full list.",
     )
     sp.add_argument("--nav", type=float, default=None, help="paper NAV (assumption)")
+    sp.add_argument(
+        "--daily-context", dest="daily_context", action="store_true",
+        help="attach prior-session REAL risk-free rate + vol regime from the offline "
+             "SWE bridge (network-free; replaces the hardcoded 0.04 risk-free rate)",
+    )
+    sp.add_argument("--swe-root", dest="swe_root", default=None,
+                    help="override the SWE repo root used by --daily-context")
     sp.add_argument("--entry-z", dest="entry_z", type=float, default=2.0)
     sp.add_argument("--stop-k", dest="stop_k", type=float, default=1.0)
     sp.add_argument(

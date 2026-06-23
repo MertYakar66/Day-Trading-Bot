@@ -35,6 +35,12 @@ env/
 # Small captured slices used as test fixtures live under tests/fixtures/ instead.
 data_raw/
 
+# Machine-local real-data audit/test harness (depends on the operator's local SWE
+# data paths; not part of the shipped engine). Kept out of the tree and CI; the
+# shipped real-data validation harnesses live under scripts/ (validate_real_gex.py,
+# measure_real_vrp.py, stress_engine.py).
+scripts/swe_tests/
+
 # Generated dashboards (regenerable via `python -m intraday report`). The tracked
 # illustrative example lives at docs/sample_dashboard.html.
 /dashboard.html

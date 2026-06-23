@@ -117,15 +117,26 @@ def test_evaluate_noise_is_not_significant():
 def test_edge_verdict_is_three_state_with_insufficient_precedence():
     import dataclasses
 
-    from intraday.eval import edge_verdict
+    from intraday.eval import INSUFFICIENT_DATA_MIN_DAYS, edge_verdict
 
-    # < 2 days => INSUFFICIENT_DATA, regardless of significant
+    # < INSUFFICIENT_DATA_MIN_DAYS days => INSUFFICIENT_DATA, regardless of significant
     assert edge_verdict(evaluate_daily_pnl(pd.Series([100.0]))) == "INSUFFICIENT_DATA"
     ev = evaluate_daily_pnl(_series(0.0, 100.0, 150, seed=9), n_trials=20)
     assert edge_verdict(ev) == "NO_EDGE"                                   # enough days, not significant
     assert edge_verdict(dataclasses.replace(ev, significant=True)) == "EDGE"
-    # insufficient overrides a (fabricated) significant flag
+    # insufficient overrides a (fabricated) significant flag, right up to the floor
     assert edge_verdict(dataclasses.replace(ev, n_days=1, significant=True)) == "INSUFFICIENT_DATA"
+    assert (
+        edge_verdict(
+            dataclasses.replace(ev, n_days=INSUFFICIENT_DATA_MIN_DAYS - 1, significant=True)
+        )
+        == "INSUFFICIENT_DATA"
+    )
+    # exactly at the floor the verdict becomes definitive again
+    assert (
+        edge_verdict(dataclasses.replace(ev, n_days=INSUFFICIENT_DATA_MIN_DAYS, significant=True))
+        == "EDGE"
+    )
 
 
 def test_evaluate_explicit_var_sr_is_monotone_and_differs_from_default():

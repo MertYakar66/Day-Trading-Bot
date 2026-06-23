@@ -40,12 +40,17 @@ _EULER_GAMMA = 0.5772156649015329
 # number scattered across modules.
 DEFLATED_SHARPE_SIGNIFICANCE_THRESHOLD = 0.95
 
-# Below this many trading days a daily series is too short to judge an edge at all:
-# the statistics degenerate (evaluate_daily_pnl hard-returns significant=False with a
-# NaN DSR for n < 2). Such a run is INSUFFICIENT DATA, NOT a 'no edge' finding — every
-# verdict surface (CLI scorecard, JSON export, HTML dashboard/comparison) keys off this
-# one constant so the three-state verdict stays in lockstep.
-INSUFFICIENT_DATA_MIN_DAYS = 2
+# Below this many trading days a daily series is too short to judge an edge at all.
+# At n < 2 the statistics degenerate outright (evaluate_daily_pnl hard-returns
+# significant=False with a NaN DSR); below ~a month of sessions the clustered-t /
+# stationary-bootstrap / DSR machinery is running on too few daily observations for
+# its asymptotics to mean anything, so printing a definitive verdict would outrun
+# the statistics. Such a run is INSUFFICIENT DATA, NOT a 'no edge' finding — every
+# verdict surface (CLI scorecard, JSON export, HTML dashboard/comparison) keys off
+# this one constant so the three-state verdict stays in lockstep. This is a
+# VALIDITY floor, not a power guarantee: even above it, NO_EDGE means "no evidence
+# of an edge at this sample size", never proof of absence.
+INSUFFICIENT_DATA_MIN_DAYS = 20
 
 
 def daily_pnl_from_result(result) -> pd.Series:

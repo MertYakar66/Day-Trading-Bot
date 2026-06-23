@@ -73,6 +73,15 @@ class FeatureRow:
     flip_distance_pct: float | None = None
     nearest_call_wall: float | None = None
     nearest_put_wall: float | None = None
+    # Prior-session daily real-data context (PIT, stamped from DailyContextProvider).
+    # All None unless a daily-context provider is supplied to the backtester.
+    # ``risk_free_rate`` is an annualized decimal; the vix_* fields are points.
+    risk_free_rate: float | None = None
+    vix: float | None = None
+    vix_term_slope: float | None = None   # vix / vix3m: <1 contango, >1 backwardation
+    vix_front_slope: float | None = None  # vix9d / vix
+    vvix: float | None = None
+    skew: float | None = None
     meta: Mapping = None  # type: ignore[assignment]
 
     def to_dict(self) -> dict:
