@@ -27,6 +27,7 @@ data to see whether it produces realistic and reliable outputs.
 | **Validation** | Real GEX reconciles to an independent BSM recompute to **2.3e-15**; real single-name VRP **replicates** the −0.46 vol-pt finding; **33/33** numerical/PIT stress cases pass. |
 | **Tests** | +90 hermetic tests (network-free, no dependence on the 11 GB data). Suite **634 passing**, ruff + mypy clean. |
 | **Core-thesis test** | Built a real multi-year GEX reconstructor from the deep history (BS IV inversion) and tested the gamma-spine premise — **it holds and replicates**: the dealer-gamma regime predicts next-day realized moves on SPY *and* QQQ (~+27 bps, p<0.001 each) even after controlling for vol clustering. See `docs/GAMMA_THESIS_FINDING.md`. |
+| **Monetization test** | Priced the validated signal as a real-NBBO 1-day ATM straddle (2093 round trips, `intraday/data/straddle_history.py`, adversarially verified): **no gross alpha** — gross return ~0 and regime-independent because the bigger short-gamma move is already in the IV; net bleeds the ~1% spread. Corrects "killed by costs" → **"priced in first, then costs."** See `docs/GAMMA_MONETIZATION_FINDING.md`. |
 
 ---
 

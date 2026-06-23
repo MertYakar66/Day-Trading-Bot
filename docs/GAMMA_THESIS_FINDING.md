@@ -52,13 +52,20 @@ across SPY and QQQ**.
    buckets. The near-identical coefficient across two symbols is strong evidence
    this is a real structural effect, not a fluke. Genuine real-data support for the
    engine's central idea.
-2. **A real signal is not a tradeable edge.** Knowing short-gamma precedes bigger
-   moves does not mean the strategies that try to *monetize* it make money. The
-   published headline stands: S1/S3/S4/S5 are net-negative after costs on real
-   data. The precise, actionable conclusion is therefore: **the signal is real; the
-   problem is execution and cost, not the thesis.** Effort is better spent on
-   cost/structure (e.g. expressing the regime via cheaper instruments or longer
-   holds) than on doubting the premise.
+2. **A real signal is not a tradeable edge — and the follow-on monetization test
+   sharpens *why*.** Knowing short-gamma precedes bigger moves does not mean a strategy
+   that tries to *monetize* it makes money. The follow-on real-NBBO test
+   (`docs/GAMMA_MONETIZATION_FINDING.md`) priced the most direct expression — a 1-day
+   ATM straddle conditioned on the regime, on 2093 real round trips — and found **no
+   gross alpha**: the gross straddle return is ~0 and **regime-independent** (gross
+   SG−LG gap +0.5 bps, bootstrap CI straddling zero), because the bigger short-gamma
+   move is already in the IV (fair-adjusted, short-gamma realizes ≈0.95× of its implied
+   move). So the earlier "the problem is execution and cost, not the thesis" was too
+   optimistic: the precise, corrected conclusion is **"priced in first, then costs"** —
+   the move is embedded in the premium, and the real spread (~1% round trip) then makes
+   it strictly worse (net −1.2%/trade, t<−8). NB: layer (A)'s realized/implied ratio has
+   a **√(2/π)≈0.80 fair baseline** (a mean |move| is only 0.80 of a one-sigma move), so
+   the gross straddle P&L — not that ratio — is the dollar-accurate pricing test.
 3. **Caveats.** Regime is the coarse GEX *sign* (not magnitude/flip-distance);
    chains are *reconstructed* (BS-inverted from NBBO mids), not a third-party GEX
    feed; returns use the parity spot (validated to <0.3% vs Yahoo); a single ~30-DTE
