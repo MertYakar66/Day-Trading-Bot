@@ -52,6 +52,14 @@ headline is unchanged**). Tests 487 → 529 → 544.
   of masquerading as a quiet no-trade session; samples regenerated.
 
 ### Fixed
+- **OFI is now direction-signed** (audit-confirmed defect): each tape print is
+  signed by what the customer initiation means for the UNDERLYING — buy-call /
+  sell-put = bullish (+), sell-call / buy-put = bearish (−), "mid" excluded.
+  Previously calls and puts were lumped by aggressor side alone, so heavy put
+  BUYING (bearish) read as positive "buying pressure" — the exact opposite of
+  the sign S1's entry conditions assume. Real direction-signed OFI on captured
+  tape additionally requires NBBO-classified sides, which the new
+  `trade_quote`-based puller provides.
 - **Packaging (shipping defect)**: the wheel shipped only the top-level modules
   (`packages = ["intraday"]`), dropping every subpackage — a clean `pip install`'d
   `intraday` console script crashed on the first import. Switched to setuptools
