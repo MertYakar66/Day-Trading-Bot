@@ -18,6 +18,8 @@ minutes-to-hours intraday decisions.
 - **Real-data path:** [`docs/REAL_DATA.md`](docs/REAL_DATA.md) +
   [`docs/OPERATOR_RUNBOOK.md`](docs/OPERATOR_RUNBOOK.md) — the corrected data-tier
   wiring (IBKR/parity underlying, Theta OPTIONS) and the scoped operator Theta pull.
+- **Daily prospective routine:** [`docs/DAILY_ROUTINE.md`](docs/DAILY_ROUTINE.md) — the
+  once-a-day no-Theta loop that accumulates a prospective, point-in-time paper record.
 - **Contributing & changes:** [`CONTRIBUTING.md`](CONTRIBUTING.md) (guardrails + dev
   setup), [`CHANGELOG.md`](CHANGELOG.md).
 
