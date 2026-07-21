@@ -1,0 +1,285 @@
+event,ticker,name,release_date,release_time,tz_label,survey,actual,prior
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-01-03,10:00:00,America/New_York,,50.5,49.2
+ism_services,NAPMNMI Index,ISM Services PMI,2025-01-07,10:00:00,America/New_York,,52.6,53.5
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-01-10,08:30:00,America/New_York,,-48.0,237.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-01-10,08:30:00,America/New_York,,4.0,4.1
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-01-14,08:30:00,America/New_York,,3.1,2.8
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-01-14,08:30:00,America/New_York,,3.8,3.5
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-01-15,08:30:00,America/New_York,,3.3,3.2
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-01-15,08:30:00,America/New_York,,3.0,2.9
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-01-16,08:30:00,America/New_York,,-0.8,0.8
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-01-29,14:00:00,America/New_York,,4.5,4.5
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-01-30,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-01-31,08:30:00,America/New_York,3.4,2.7801,2.9886
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-02-03,10:00:00,America/New_York,,50.0,50.5
+ism_services,NAPMNMI Index,ISM Services PMI,2025-02-05,10:00:00,America/New_York,,53.2,52.6
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-02-07,08:30:00,America/New_York,,42.0,-48.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-02-07,08:30:00,America/New_York,,4.2,4.0
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-02-12,08:30:00,America/New_York,,3.1,3.3
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-02-12,08:30:00,America/New_York,,2.8,3.0
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-02-13,08:30:00,America/New_York,,2.1,3.1
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-02-13,08:30:00,America/New_York,,3.4,3.8
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-02-14,08:30:00,America/New_York,,0.0,-0.8
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-02-27,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-02-28,08:30:00,America/New_York,3.4,2.9686,2.7801
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-03-03,10:00:00,America/New_York,,48.9,50.0
+ism_services,NAPMNMI Index,ISM Services PMI,2025-03-05,10:00:00,America/New_York,,50.8,53.2
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-03-07,08:30:00,America/New_York,,67.0,42.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-03-07,08:30:00,America/New_York,,4.2,4.2
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-03-12,08:30:00,America/New_York,,2.8,3.1
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-03-12,08:30:00,America/New_York,,2.4,2.8
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-03-13,08:30:00,America/New_York,,0.8,2.1
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-03-13,08:30:00,America/New_York,,3.2,3.4
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-03-17,08:30:00,America/New_York,,1.7,0.0
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-03-19,14:00:00,America/New_York,,4.5,4.5
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-03-27,08:30:00,America/New_York,1.6,-0.6,1.9
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-03-28,08:30:00,America/New_York,3.4,2.6703,2.9686
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-04-01,10:00:00,America/New_York,,48.8,48.9
+ism_services,NAPMNMI Index,ISM Services PMI,2025-04-03,10:00:00,America/New_York,,51.6,50.8
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-04-04,08:30:00,America/New_York,,108.0,67.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-04-04,08:30:00,America/New_York,,4.2,4.2
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-04-10,08:30:00,America/New_York,,2.8,2.8
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-04-10,08:30:00,America/New_York,,2.3,2.4
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-04-11,08:30:00,America/New_York,,0.3,0.8
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-04-11,08:30:00,America/New_York,,2.4,3.2
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-04-16,08:30:00,America/New_York,,-0.1,1.7
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-04-30,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-04-30,10:00:00,America/New_York,3.4,2.6148,2.6703
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-05-01,10:00:00,America/New_York,,48.6,48.8
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-05-02,08:30:00,America/New_York,,13.0,108.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-05-02,08:30:00,America/New_York,,4.3,4.2
+ism_services,NAPMNMI Index,ISM Services PMI,2025-05-05,10:00:00,America/New_York,,50.2,51.6
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-05-07,14:00:00,America/New_York,,4.5,4.5
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-05-13,08:30:00,America/New_York,,2.8,2.8
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-05-13,08:30:00,America/New_York,,2.4,2.3
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-05-15,08:30:00,America/New_York,,1.2,0.3
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-05-15,08:30:00,America/New_York,,2.7,2.4
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-05-15,08:30:00,America/New_York,,-1.1,-0.1
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-05-29,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-05-30,08:30:00,America/New_York,3.4,2.7839,2.6148
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-06-02,10:00:00,America/New_York,,49.0,48.6
+ism_services,NAPMNMI Index,ISM Services PMI,2025-06-04,10:00:00,America/New_York,,50.8,50.2
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-06-06,08:30:00,America/New_York,,-20.0,13.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-06-06,08:30:00,America/New_York,,4.1,4.3
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-06-11,08:30:00,America/New_York,,2.9,2.8
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-06-11,08:30:00,America/New_York,,2.7,2.4
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-06-12,08:30:00,America/New_York,,1.9,1.2
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-06-12,08:30:00,America/New_York,,2.4,2.7
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-06-17,08:30:00,America/New_York,,1.2,-1.1
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-06-18,14:00:00,America/New_York,,4.5,4.5
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-06-26,08:30:00,America/New_York,1.6,3.8,-0.6
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-06-27,08:30:00,America/New_York,3.4,2.8074,2.7839
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-07-01,10:00:00,America/New_York,,48.4,49.0
+ism_services,NAPMNMI Index,ISM Services PMI,2025-07-03,10:00:00,America/New_York,,50.5,50.8
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-07-03,08:30:00,America/New_York,,64.0,-20.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-07-03,08:30:00,America/New_York,,4.3,4.1
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-07-15,08:30:00,America/New_York,,3.1,2.9
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-07-15,08:30:00,America/New_York,,2.7,2.7
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-07-16,08:30:00,America/New_York,,1.9,1.9
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-07-16,08:30:00,America/New_York,,3.2,2.4
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-07-17,08:30:00,America/New_York,,0.6,1.2
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-07-30,14:00:00,America/New_York,,4.5,4.5
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-07-30,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-07-31,08:30:00,America/New_York,3.4,2.863,2.8074
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-08-01,10:00:00,America/New_York,,48.9,48.4
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-08-01,08:30:00,America/New_York,,-70.0,64.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-08-01,08:30:00,America/New_York,,4.3,4.3
+ism_services,NAPMNMI Index,ISM Services PMI,2025-08-05,10:00:00,America/New_York,,51.9,50.5
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-08-12,08:30:00,America/New_York,,3.1,3.1
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-08-12,08:30:00,America/New_York,,2.9,2.7
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-08-14,08:30:00,America/New_York,,1.9,1.9
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-08-14,08:30:00,America/New_York,,2.7,3.2
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-08-15,08:30:00,America/New_York,,0.5,0.6
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-08-28,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-08-29,08:30:00,America/New_York,3.4,2.9124,2.863
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-09-02,10:00:00,America/New_York,,48.9,48.9
+ism_services,NAPMNMI Index,ISM Services PMI,2025-09-04,10:00:00,America/New_York,,50.3,51.9
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-09-05,08:30:00,America/New_York,,76.0,-70.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-09-05,08:30:00,America/New_York,,4.4,4.3
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-09-10,08:30:00,America/New_York,,3.1,1.9
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-09-10,08:30:00,America/New_York,,3.0,2.7
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-09-11,08:30:00,America/New_York,,3.0,3.1
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-09-11,08:30:00,America/New_York,,3.0,2.9
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-09-16,08:30:00,America/New_York,,0.1,0.5
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-09-17,14:00:00,America/New_York,,4.25,4.25
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-09-25,08:30:00,America/New_York,1.6,4.4,3.8
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-09-26,08:30:00,America/New_York,3.4,2.8251,2.9124
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-10-01,10:00:00,America/New_York,,48.8,48.9
+ism_services,NAPMNMI Index,ISM Services PMI,2025-10-03,10:00:00,America/New_York,,52.0,50.3
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-10-24,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-10-24,08:30:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-10-29,14:00:00,America/New_York,,4.0,4.0
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-11-03,10:00:00,America/New_York,,48.0,48.8
+ism_services,NAPMNMI Index,ISM Services PMI,2025-11-05,10:00:00,America/New_York,,52.4,52.0
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-11-20,08:30:00,America/New_York,,41.0,-140.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-11-20,08:30:00,America/New_York,,4.5,4.4
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2025-11-25,08:30:00,America/New_York,,2.8,2.5
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2025-11-25,08:30:00,America/New_York,,3.1,2.8
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-11-25,08:30:00,America/New_York,,0.5,-0.2
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2025-12-01,10:00:00,America/New_York,,47.9,48.0
+ism_services,NAPMNMI Index,ISM Services PMI,2025-12-03,10:00:00,America/New_York,,53.8,52.4
+pce,PCE CYOY Index,US Personal Consumption Expend,2025-12-05,10:00:00,America/New_York,3.4,2.9711,2.8291
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2025-12-10,14:00:00,America/New_York,,3.75,3.75
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-12-16,08:30:00,America/New_York,,-17.0,41.0
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2025-12-16,08:30:00,America/New_York,,-17.0,41.0
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2025-12-16,08:30:00,America/New_York,,0.0,0.5
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2025-12-16,08:30:00,America/New_York,,4.4,4.5
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2025-12-18,08:30:00,America/New_York,,2.6,2.6
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2025-12-18,08:30:00,America/New_York,,2.7,2.7
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2025-12-23,08:30:00,America/New_York,1.6,0.5,4.4
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-01-05,10:00:00,America/New_York,,52.6,47.9
+ism_services,NAPMNMI Index,ISM Services PMI,2026-01-07,10:00:00,America/New_York,,53.8,53.8
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-01-09,08:30:00,America/New_York,,160.0,-17.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-01-09,08:30:00,America/New_York,,4.3,4.4
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-01-13,08:30:00,America/New_York,,2.5,2.6
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-01-13,08:30:00,America/New_York,,2.4,2.7
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-01-14,08:30:00,America/New_York,,1.1,2.2
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-01-14,08:30:00,America/New_York,,1.1,2.2
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-01-14,08:30:00,America/New_York,,3.1,3.1
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-01-14,08:30:00,America/New_York,,3.1,3.1
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-01-14,08:30:00,America/New_York,,0.0,0.0
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-01-22,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-01-22,10:00:00,America/New_York,3.4,3.0862,2.9711
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-01-22,10:00:00,America/New_York,3.4,3.0862,2.9711
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-01-28,14:00:00,America/New_York,,3.75,3.75
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-01-30,08:30:00,America/New_York,,1.1,2.2
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-01-30,08:30:00,America/New_York,,3.1,3.1
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-02-02,10:00:00,America/New_York,,52.4,52.6
+ism_services,NAPMNMI Index,ISM Services PMI,2026-02-04,10:00:00,America/New_York,,56.1,53.8
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-02-10,08:30:00,America/New_York,,0.9,0.0
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-02-11,08:30:00,America/New_York,,-156.0,160.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-02-11,08:30:00,America/New_York,,4.4,4.3
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-02-13,08:30:00,America/New_York,,2.5,2.5
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-02-13,08:30:00,America/New_York,,2.4,2.4
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-02-20,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-02-20,08:30:00,America/New_York,3.4,3.0325,3.0862
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-02-27,08:30:00,America/New_York,,1.7,1.1
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-02-27,08:30:00,America/New_York,,3.4,3.1
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-03-02,10:00:00,America/New_York,,52.7,52.4
+ism_services,NAPMNMI Index,ISM Services PMI,2026-03-04,10:00:00,America/New_York,,54.0,56.1
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-03-06,08:30:00,America/New_York,,214.0,-156.0
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-03-06,08:30:00,America/New_York,,1.7,0.9
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-03-06,08:30:00,America/New_York,,4.3,4.4
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-03-11,08:30:00,America/New_York,,2.6,2.5
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-03-11,08:30:00,America/New_York,,3.3,2.4
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-03-13,08:30:00,America/New_York,1.6,1.6,0.5
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-03-13,08:30:00,America/New_York,3.4,3.2363,3.0325
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-03-18,14:00:00,America/New_York,,3.75,3.75
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-03-18,08:30:00,America/New_York,,4.5,1.7
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-03-18,08:30:00,America/New_York,,4.3,3.4
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-04-01,10:00:00,America/New_York,,52.7,52.7
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-04-01,08:30:00,America/New_York,,0.4,1.7
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-04-03,08:30:00,America/New_York,,179.0,214.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-04-03,08:30:00,America/New_York,,4.3,4.3
+ism_services,NAPMNMI Index,ISM Services PMI,2026-04-06,10:00:00,America/New_York,,53.6,54.0
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-04-09,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-04-09,08:30:00,America/New_York,3.4,3.2892,3.2363
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-04-10,08:30:00,America/New_York,,2.8,2.6
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-04-10,08:30:00,America/New_York,,3.8,3.3
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-04-14,08:30:00,America/New_York,,6.5,4.5
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-04-14,08:30:00,America/New_York,,5.7,4.3
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-04-21,08:30:00,America/New_York,,0.4,1.7
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-04-29,14:00:00,America/New_York,,3.75,3.75
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-04-30,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-04-30,08:30:00,America/New_York,3.4,3.2892,3.2363
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-05-01,10:00:00,America/New_York,,54.0,52.7
+ism_services,NAPMNMI Index,ISM Services PMI,2026-05-05,10:00:00,America/New_York,,54.5,53.6
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-05-08,08:30:00,America/New_York,,172.0,179.0
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-05-08,08:30:00,America/New_York,,4.3,4.3
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-05-12,08:30:00,America/New_York,,2.9,2.8
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-05-12,08:30:00,America/New_York,,4.2,3.8
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-05-13,08:30:00,America/New_York,,9.1,6.5
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-05-13,08:30:00,America/New_York,,6.5,5.7
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-05-14,08:30:00,America/New_York,,0.9,0.4
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-05-28,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-05-28,08:30:00,America/New_York,3.4,,
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-06-01,10:00:00,America/New_York,,,
+ism_services,NAPMNMI Index,ISM Services PMI,2026-06-03,10:00:00,America/New_York,,,
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-06-05,08:30:00,America/New_York,,,
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-06-05,08:30:00,America/New_York,,,
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-06-10,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-06-10,08:30:00,America/New_York,,,
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-06-11,08:30:00,America/New_York,,,
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-06-11,08:30:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-06-17,14:00:00,America/New_York,,3.75,3.75
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-06-17,08:30:00,America/New_York,,,
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-06-25,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-06-25,08:30:00,America/New_York,3.4,,
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-07-01,10:00:00,America/New_York,,,
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-07-02,08:30:00,America/New_York,,,
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-07-02,08:30:00,America/New_York,,,
+ism_services,NAPMNMI Index,ISM Services PMI,2026-07-06,10:00:00,America/New_York,,,
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-07-14,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-07-14,08:30:00,America/New_York,,,
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-07-15,08:30:00,America/New_York,,,
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-07-15,08:30:00,America/New_York,,,
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-07-16,08:30:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-07-29,14:00:00,America/New_York,,,
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-07-30,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-07-30,08:30:00,America/New_York,3.4,,
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-08-03,10:00:00,America/New_York,,,
+ism_services,NAPMNMI Index,ISM Services PMI,2026-08-05,10:00:00,America/New_York,,,
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-08-07,08:30:00,America/New_York,,,
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-08-07,08:30:00,America/New_York,,,
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-08-12,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-08-12,08:30:00,America/New_York,,,
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-08-13,08:30:00,America/New_York,,,
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-08-13,08:30:00,America/New_York,,,
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-08-14,08:30:00,America/New_York,,,
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-08-26,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-08-26,08:30:00,America/New_York,3.4,,
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-09-01,10:00:00,America/New_York,,,
+ism_services,NAPMNMI Index,ISM Services PMI,2026-09-03,10:00:00,America/New_York,,,
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-09-04,08:30:00,America/New_York,,,
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-09-04,08:30:00,America/New_York,,,
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-09-10,08:30:00,America/New_York,,,
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-09-10,08:30:00,America/New_York,,,
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-09-11,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-09-11,08:30:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-09-16,14:00:00,America/New_York,,,
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-09-16,08:30:00,America/New_York,,,
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-09-30,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-09-30,08:30:00,America/New_York,3.4,,
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-10-01,10:00:00,America/New_York,,,
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-10-02,08:30:00,America/New_York,,,
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-10-02,08:30:00,America/New_York,,,
+ism_services,NAPMNMI Index,ISM Services PMI,2026-10-05,10:00:00,America/New_York,,,
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-10-14,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-10-14,08:30:00,America/New_York,,,
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-10-15,08:30:00,America/New_York,,,
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-10-15,08:30:00,America/New_York,,,
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-10-15,08:30:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-10-28,14:00:00,America/New_York,,,
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-10-29,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-10-29,08:30:00,America/New_York,3.4,,
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-11-02,10:00:00,America/New_York,,,
+ism_services,NAPMNMI Index,ISM Services PMI,2026-11-04,10:00:00,America/New_York,,,
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-11-06,08:30:00,America/New_York,,,
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-11-06,08:30:00,America/New_York,,,
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-11-10,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-11-10,08:30:00,America/New_York,,,
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-11-13,08:30:00,America/New_York,,,
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-11-13,08:30:00,America/New_York,,,
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-11-17,08:30:00,America/New_York,,,
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-11-25,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-11-25,08:30:00,America/New_York,3.4,,
+ism_manufacturing,NAPMPMI Index,ISM Manufacturing PMI SA,2026-12-01,10:00:00,America/New_York,,,
+ism_services,NAPMNMI Index,ISM Services PMI,2026-12-03,10:00:00,America/New_York,,,
+nonfarm_payrolls,NFP TCH Index,US Employees on Nonfarm Payrol,2026-12-04,08:30:00,America/New_York,,,
+unemployment_rate,USURTOT Index,U-3 US Unemployment Rate Total,2026-12-04,08:30:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2026-12-09,14:00:00,America/New_York,,,
+core_cpi,CPI XYOY Index,US CPI Urban Consumers Less Fo,2026-12-10,08:30:00,America/New_York,,,
+cpi,CPI YOY Index,US CPI Urban Consumers YoY NSA,2026-12-10,08:30:00,America/New_York,,,
+ppi,PPI YOY Index,US PPI Finished Goods NSA YoY%,2026-12-15,08:30:00,America/New_York,,,
+ppi_final_demand,FDIUFDYO Index,US PPI Final Demand YoY NSA,2026-12-15,08:30:00,America/New_York,,,
+retail_sales,RSTAMOM Index,Adjusted Retail & Food Service,2026-12-16,08:30:00,America/New_York,,,
+gdp,GDP CQOQ Index,GDP US Chained Dollars QoQ SAA,2026-12-23,08:30:00,America/New_York,1.6,,
+pce,PCE CYOY Index,US Personal Consumption Expend,2026-12-23,08:30:00,America/New_York,3.4,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-01-27,14:00:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-03-17,14:00:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-04-28,14:00:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-06-09,14:00:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-07-28,14:00:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-09-15,14:00:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-10-27,14:00:00,America/New_York,,,
+fomc_rate_decision,FDTR Index,Federal Funds Target Rate - Up,2027-12-08,14:00:00,America/New_York,,,
